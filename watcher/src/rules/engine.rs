@@ -21,7 +21,14 @@ use tracing::{debug, info, warn};
 
 use crate::config::Config;
 use crate::db::DbPool;
-use crate::types::{AlertEvent, ParsedTransaction, ProtocolWindow, RuleType, SlotSnapshot, TvlCache};
+use crate::types::{
+    AlertEvent, ParsedTransaction, ProtocolWindow, RuleType, SlotSnapshot, TvlCache,
+};
+
+struct WatchedProtocol {
+    window: ProtocolWindow,
+    peak_tvl: f64,
+}
 
 pub async fn run(
     cfg: Config,
@@ -31,13 +38,16 @@ pub async fn run(
     mut redis: ConnectionManager,
     watcher_pubkey: String,
 ) -> Result<()> {
-    // Per-protocol rolling window: program_id → VecDeque<SlotSnapshot>
-    let mut windows: HashMap<String, ProtocolWindow> = HashMap::new();
+    // Per-protocol rolling window + persisted peak TVL baseline.
+    let mut windows: HashMap<String, WatchedProtocol> = HashMap::new();
 
     for program in &cfg.watched_programs {
         windows.insert(
             program.clone(),
-            VecDeque::with_capacity(cfg.window_size + 1),
+            WatchedProtocol {
+                window: VecDeque::with_capacity(cfg.window_size + 1),
+                peak_tvl: 0.0,
+            },
         );
     }
 
@@ -76,22 +86,43 @@ pub async fn run(
 
                 // ── Update rolling window ──────────────────────────────────────
 
-                let window = windows
+                let entry = windows
                     .entry(protocol.clone())
-                    .or_insert_with(|| VecDeque::with_capacity(cfg.window_size + 1));
+                    .or_insert_with(|| WatchedProtocol {
+                        window: VecDeque::with_capacity(cfg.window_size + 1),
+                        peak_tvl: 0.0,
+                    });
 
                 // Read current TVL from Redis — written by geyser.rs on every tx.
-                // Falls back to computing from this tx's deltas if Redis is cold
-                // (e.g., first 30s after startup before Redis has been populated).
-                let tvl = read_tvl_from_redis(&mut redis, &protocol)
+                // If Redis is cold or missing, treat TVL as 0 and rely on the
+                // peak/noise guards below instead of inventing a baseline.
+                let tvl_raw = read_tvl_from_redis(&mut redis, &protocol)
                     .await
-                    .unwrap_or_else(|_| {
-                        crate::geyser::largest_token_balance_usd_from_tx(&tx)
-                    });
-                    debug!( 
-                    "Slot {} TVL read: ${:.0} (protocol={}...)",
-                    tx.slot, tvl, &protocol[..8]
-                    ); 
+                    .unwrap_or(0.0);
+
+                // Sanitize cold-start spikes from empty or stale cache reads.
+                const MAX_PLAUSIBLE_TVL: f64 = 500_000_000.0;
+                let tvl = if tvl_raw > MAX_PLAUSIBLE_TVL {
+                    0.0
+                } else {
+                    tvl_raw
+                };
+
+                // Persist the strongest pre-drain baseline across the rolling window.
+                if tvl > 10_000.0 {
+                    entry.peak_tvl = entry.peak_tvl.max(tvl);
+                }
+
+                debug!(
+                    "Slot {} TVL read: ${:.0} peak=${:.0} (protocol={}...)",
+                    tx.slot,
+                    tvl,
+                    entry.peak_tvl,
+                    &protocol[..8]
+                );
+
+                let peak_tvl = entry.peak_tvl;
+                let window = &mut entry.window;
                 let bridge_outflow = compute_bridge_outflow(&tx);
 
                 // Same slot → merge into existing snapshot (multiple txs per slot is normal)
@@ -124,21 +155,17 @@ pub async fn run(
                 let window_slice: Vec<&SlotSnapshot> = window.iter().collect();
 
                 // Rule 1: Flash loan + TVL drain (confidence-weighted)
-                let score1 = crate::rules::flash_loan::score(&window_slice);
+                let score1 = crate::rules::flash_loan::score(&window_slice, peak_tvl);
 
                 // Rule 2: TVL velocity (rapid drain without detected flash loan)
-                let score2 = crate::rules::tvl_velocity::score(
-                    &window_slice,
-                    cfg.tvl_drop_threshold,
-                );
+                let score2 =
+                    crate::rules::tvl_velocity::score(&window_slice, cfg.tvl_drop_threshold);
 
                 // Rule 3: Bridge outflow spike (funds leaving Solana via bridge)
-                let score3 = crate::rules::bridge_spike::score(
-                    &window_slice,
-                    cfg.bridge_spike_multiplier,
-                );
+                let score3 =
+                    crate::rules::bridge_spike::score(&window_slice, cfg.bridge_spike_multiplier);
                 // After computing scores, log them
-              
+
                 // Take the highest-scoring rule — one alert per slot per protocol
                 let (max_score, fired_rule) = [
                     (score1, RuleType::FlashLoanDrain),
@@ -148,15 +175,16 @@ pub async fn run(
                 .into_iter()
                 .max_by_key(|(s, _)| *s)
                 .unwrap();
-                  debug!(
+                debug!(
                     "Scores: R1={} R2={} R3={} max={} threshold={}",
-                    score1, score2, score3, max_score, 
+                    score1,
+                    score2,
+                    score3,
+                    max_score,
                     cfg.min_severity_to_pause.min(cfg.min_severity_to_publish)
                 );
                 // Below both alert thresholds — nothing to do
-                let min_threshold = cfg
-                    .min_severity_to_pause
-                    .min(cfg.min_severity_to_publish);
+                let min_threshold = cfg.min_severity_to_pause.min(cfg.min_severity_to_publish);
 
                 if max_score < min_threshold {
                     continue;
@@ -193,7 +221,7 @@ pub async fn run(
                 let alert = build_alert(
                     &tx,
                     &protocol,
-                     &cfg.protocol_authority, 
+                    &cfg.protocol_authority,
                     max_score,
                     fired_rule,
                     &watcher_pubkey,
@@ -202,7 +230,10 @@ pub async fn run(
                 // ── Per-protocol cooldown ──────────────────────────────────────
                 // Prevents alert storms when TVL oscillates across threshold.
                 // After one alert fires for a protocol, suppress for 30s.
+                // ── Per-protocol cooldown ──────────────────────────────────────
+
                 let cooldown_key = format!("alert_cooldown:{}", protocol);
+
                 let on_cooldown: bool = redis::cmd("EXISTS")
                     .arg(&cooldown_key)
                     .query_async(&mut redis)
@@ -214,15 +245,16 @@ pub async fn run(
                     continue;
                 }
 
-                // Set cooldown BEFORE dispatching (crash safety)
-                let _: Result<(), _> = redis::cmd("SET")
-                    .arg(&cooldown_key)
-                    .arg(1u8)
-                    .arg("EX")
-                    .arg(30u64) // 30 second cooldown per protocol
-                    .query_async(&mut redis)
-                    .await;
-
+                // ✅ ONLY set cooldown for strong alerts
+                if max_score >= 70 {
+                    let _: Result<(), _> = redis::cmd("SET")
+                        .arg(&cooldown_key)
+                        .arg(1u8)
+                        .arg("EX")
+                        .arg(30u64)
+                        .query_async(&mut redis)
+                        .await;
+                }
                 // ── Dedup via Redis ────────────────────────────────────────────
                 // Prevents re-firing the same alert if the engine restarts mid-attack.
                 // Key: alert_sent:{alert_id_hex} — TTL 5 minutes.
@@ -234,7 +266,10 @@ pub async fn run(
                     .unwrap_or(false);
 
                 if already_sent {
-                    debug!("Alert {} already sent — skipping", &alert.alert_id_hex[..16]);
+                    debug!(
+                        "Alert {} already sent — skipping",
+                        &alert.alert_id_hex[..16]
+                    );
                     continue;
                 }
 
@@ -263,7 +298,7 @@ pub async fn run(
                 if matches!(alert.rule_triggered, RuleType::FlashLoanDrain) {
                     info!(
                         "Rule 1 detail: {}",
-                        crate::rules::flash_loan::explain(&window_slice),
+                        crate::rules::flash_loan::explain(&window_slice, peak_tvl),
                     );
                 }
 
@@ -303,15 +338,9 @@ pub async fn run(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async fn read_tvl_from_redis(
-    redis: &mut ConnectionManager,
-    protocol: &str,
-) -> Result<f64> {
+async fn read_tvl_from_redis(redis: &mut ConnectionManager, protocol: &str) -> Result<f64> {
     let key = format!("tvl:{}", protocol);
-    let val: String = redis::cmd("GET")
-        .arg(&key)
-        .query_async(redis)
-        .await?;
+    let val: String = redis::cmd("GET").arg(&key).query_async(redis).await?;
     let cache: TvlCache = serde_json::from_str(&val)?;
     Ok(cache.tvl_usd)
 }
@@ -370,7 +399,7 @@ fn build_alert(
         alert_id,
         alert_id_hex,
         protocol: protocol.to_string(),
-        protocol_authority: protocol_authority.to_string(),  // ← ADD
+        protocol_authority: protocol_authority.to_string(), // ← ADD
         severity,
         rule_triggered: rule,
         estimated_at_risk_usd: estimated_at_risk,

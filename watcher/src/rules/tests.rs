@@ -62,28 +62,39 @@ mod rule_tests {
         }
     }
 
+    fn score_r1(snaps: &[SlotSnapshot]) -> u8 {
+        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
+        let peak_tvl = snaps.iter().map(|s| s.tvl_usd).fold(0.0_f64, f64::max);
+        flash_loan::score(&refs, peak_tvl)
+    }
+
     // ─── Rule 1: Flash Loan + Drain ───────────────────────────────────────────
 
     #[test]
     fn r1_too_small_window_returns_0() {
         let snaps = vec![make_snap_with_flash(0, 1_000_000.0, true, 95)];
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(flash_loan::score(&refs), 0, "Window < 2 should return 0");
+        assert_eq!(score_r1(&snaps), 0, "Window < 2 should return 0");
     }
 
     #[test]
     fn r1_no_flash_loan_returns_0() {
-        let snaps: Vec<_> = (0..5).map(|i| make_snap_with_flash(i, 1_000_000.0, false, 0)).collect();
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(flash_loan::score(&refs), 0, "No flash loan = no alert");
+        let snaps: Vec<_> = (0..5)
+            .map(|i| make_snap_with_flash(i, 1_000_000.0, false, 0))
+            .collect();
+        assert_eq!(score_r1(&snaps), 0, "No flash loan = no alert");
     }
 
     #[test]
     fn r1_flash_loan_no_tvl_drop_returns_0() {
         // Flash loan at slot 2 but TVL stays flat — repaid with no drain
-        let snaps: Vec<_> = (0..5).map(|i| make_snap_with_flash(i, 1_000_000.0, i == 2, 95)).collect();
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(flash_loan::score(&refs), 0, "Flash + no drain = no alert (legitimate flash loan)");
+        let snaps: Vec<_> = (0..5)
+            .map(|i| make_snap_with_flash(i, 1_000_000.0, i == 2, 95))
+            .collect();
+        assert_eq!(
+            score_r1(&snaps),
+            0,
+            "Flash + no drain = no alert (legitimate flash loan)"
+        );
     }
 
     #[test]
@@ -91,11 +102,16 @@ mod rule_tests {
         // Flash at slot 1, 9% TVL drop — current rule assigns a low non-zero score
         // because the graduated model starts scoring at 5% drain severity.
         let tvls = [1_000_000.0, 1_000_000.0, 970_000.0, 950_000.0, 910_000.0];
-        let snaps: Vec<_> = tvls.iter().enumerate()
+        let snaps: Vec<_> = tvls
+            .iter()
+            .enumerate()
             .map(|(i, &t)| make_snap_with_flash(i as u64, t, i == 1, 95))
             .collect();
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(flash_loan::score(&refs), 42, "9% drop => base 45 weighted by 95 confidence");
+        assert_eq!(
+            score_r1(&snaps),
+            42,
+            "9% drop => base 45 weighted by 95 confidence"
+        );
     }
 
     #[test]
@@ -103,34 +119,50 @@ mod rule_tests {
         // Classic exploit: flash borrow then drain 30% TVL.
         // Current rule: base 80 weighted by 95 confidence => 76.
         let tvls = [1_000_000.0, 1_000_000.0, 850_000.0, 750_000.0, 700_000.0];
-        let snaps: Vec<_> = tvls.iter().enumerate()
+        let snaps: Vec<_> = tvls
+            .iter()
+            .enumerate()
             .map(|(i, &t)| make_snap_with_flash(i as u64, t, i == 1, 95))
             .collect();
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(flash_loan::score(&refs), 76, "30% drop => base 80 weighted by 95 confidence");
+        assert_eq!(
+            score_r1(&snaps),
+            76,
+            "30% drop => base 80 weighted by 95 confidence"
+        );
     }
 
     #[test]
     fn r1_flash_loan_confidence_affects_score() {
         // Same scenario but with lower confidence flash detection
         let tvls = [1_000_000.0, 1_000_000.0, 700_000.0, 500_000.0, 400_000.0];
-        let snaps_high: Vec<_> = tvls.iter().enumerate()
+        let snaps_high: Vec<_> = tvls
+            .iter()
+            .enumerate()
             .map(|(i, &t)| make_snap_with_flash(i as u64, t, i == 1, 95))
             .collect();
-        let snaps_low: Vec<_> = tvls.iter().enumerate()
+        let snaps_low: Vec<_> = tvls
+            .iter()
+            .enumerate()
             .map(|(i, &t)| make_snap_with_flash(i as u64, t, i == 1, 55))
             .collect();
 
-        let refs_high: Vec<&SlotSnapshot> = snaps_high.iter().collect();
-        let refs_low: Vec<&SlotSnapshot> = snaps_low.iter().collect();
+        let score_high = score_r1(&snaps_high);
+        let score_low = score_r1(&snaps_low);
 
-        let score_high = flash_loan::score(&refs_high);
-        let score_low = flash_loan::score(&refs_low);
-
-        assert!(score_high > score_low,
-            "Higher flash confidence should yield higher score: {} vs {}", score_high, score_low);
-        assert_eq!(score_high, 83, "60% drop => base 88 weighted by 95 confidence");
-        assert_eq!(score_low, 48, "60% drop => base 88 weighted by 55 confidence");
+        assert!(
+            score_high > score_low,
+            "Higher flash confidence should yield higher score: {} vs {}",
+            score_high,
+            score_low
+        );
+        assert_eq!(
+            score_high, 83,
+            "60% drop => base 88 weighted by 95 confidence"
+        );
+        assert_eq!(
+            score_low, 48,
+            "60% drop => base 88 weighted by 55 confidence"
+        );
     }
 
     #[test]
@@ -143,8 +175,11 @@ mod rule_tests {
             make_snap(3, 600_000.0, 0.0),
             make_snap(4, 400_000.0, 0.0),
         ];
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(flash_loan::score(&refs), 0, "Drain without flash = Rule 1 stays silent");
+        assert_eq!(
+            score_r1(&snaps),
+            0,
+            "Drain without flash = Rule 1 stays silent"
+        );
     }
 
     // ─── Rule 2: TVL Velocity ─────────────────────────────────────────────────
@@ -165,7 +200,11 @@ mod rule_tests {
             make_snap(2, 1_000.0, 0.0),
         ];
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(tvl_velocity::score(&refs, 0.20), 0, "TVL < $50k = no signal (noise floor)");
+        assert_eq!(
+            tvl_velocity::score(&refs, 0.20),
+            0,
+            "TVL < $50k = no signal (noise floor)"
+        );
     }
 
     #[test]
@@ -188,7 +227,11 @@ mod rule_tests {
             make_snap(2, 900_000.0, 0.0),
         ];
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(tvl_velocity::score(&refs, 0.20), 0, "10% drop < 20% threshold");
+        assert_eq!(
+            tvl_velocity::score(&refs, 0.20),
+            0,
+            "10% drop < 20% threshold"
+        );
     }
 
     #[test]
@@ -224,16 +267,26 @@ mod rule_tests {
             make_snap(2, 50.0, 0.0),
         ];
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(tvl_velocity::score(&refs, 0.20), 0, "TVL < $50k guard prevents noise");
+        assert_eq!(
+            tvl_velocity::score(&refs, 0.20),
+            0,
+            "TVL < $50k guard prevents noise"
+        );
     }
 
     #[test]
     fn r2_only_looks_at_last_3_slots() {
         // Slots 0-6 have stable TVL, but slots 7-9 show 30% drop
-        let snaps: Vec<_> = (0..10).map(|i| {
-            let tvl = if i < 7 { 1_000_000.0 } else { 1_000_000.0 - (i as f64 - 6.0) * 100_000.0 };
-            make_snap(i, tvl, 0.0)
-        }).collect();
+        let snaps: Vec<_> = (0..10)
+            .map(|i| {
+                let tvl = if i < 7 {
+                    1_000_000.0
+                } else {
+                    1_000_000.0 - (i as f64 - 6.0) * 100_000.0
+                };
+                make_snap(i, tvl, 0.0)
+            })
+            .collect();
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
         let score = tvl_velocity::score(&refs, 0.20);
         // Last 3 slots: 800k → 700k → (depends on formula)
@@ -245,7 +298,9 @@ mod rule_tests {
 
     #[test]
     fn r3_window_too_small_returns_0() {
-        let snaps: Vec<_> = (0..4).map(|i| make_snap(i, 1_000_000.0, 50_000.0)).collect();
+        let snaps: Vec<_> = (0..4)
+            .map(|i| make_snap(i, 1_000_000.0, 50_000.0))
+            .collect();
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
         assert_eq!(bridge_spike::score(&refs, 10.0), 0, "Window < 5 = no score");
     }
@@ -255,21 +310,33 @@ mod rule_tests {
         // Outflow < $10k — noise filter
         let snaps: Vec<_> = (0..6).map(|i| make_snap(i, 1_000_000.0, 5_000.0)).collect();
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(bridge_spike::score(&refs, 10.0), 0, "Below $10k outflow = noise");
+        assert_eq!(
+            bridge_spike::score(&refs, 10.0),
+            0,
+            "Below $10k outflow = noise"
+        );
     }
 
     #[test]
     fn r3_normal_consistent_outflow_returns_0() {
         // Consistent $50k outflow — no spike
-        let snaps: Vec<_> = (0..6).map(|i| make_snap(i, 1_000_000.0, 50_000.0)).collect();
+        let snaps: Vec<_> = (0..6)
+            .map(|i| make_snap(i, 1_000_000.0, 50_000.0))
+            .collect();
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(bridge_spike::score(&refs, 10.0), 0, "Consistent outflow = no spike");
+        assert_eq!(
+            bridge_spike::score(&refs, 10.0),
+            0,
+            "Consistent outflow = no spike"
+        );
     }
 
     #[test]
     fn r3_10x_spike_scores_85() {
         // Normal: $50k/slot, Current: $600k (12x)
-        let mut snaps: Vec<_> = (0..5).map(|i| make_snap(i, 1_000_000.0, 50_000.0)).collect();
+        let mut snaps: Vec<_> = (0..5)
+            .map(|i| make_snap(i, 1_000_000.0, 50_000.0))
+            .collect();
         snaps.push(make_snap(5, 1_000_000.0, 600_000.0)); // 12x spike
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
         let score = bridge_spike::score(&refs, 10.0);
@@ -279,7 +346,9 @@ mod rule_tests {
     #[test]
     fn r3_20x_spike_scores_95() {
         // Normal: $50k/slot, Current: $1.2M (24x)
-        let mut snaps: Vec<_> = (0..5).map(|i| make_snap(i, 1_000_000.0, 50_000.0)).collect();
+        let mut snaps: Vec<_> = (0..5)
+            .map(|i| make_snap(i, 1_000_000.0, 50_000.0))
+            .collect();
         snaps.push(make_snap(5, 1_000_000.0, 1_200_000.0)); // 24x spike
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
         let score = bridge_spike::score(&refs, 10.0);
@@ -293,7 +362,11 @@ mod rule_tests {
         snaps.push(make_snap(5, 1_000_000.0, 600_000.0));
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
         let score = bridge_spike::score(&refs, 10.0);
-        assert_eq!(score, 80, "Cold wallet + large outflow = score 80, got {}", score);
+        assert_eq!(
+            score, 80,
+            "Cold wallet + large outflow = score 80, got {}",
+            score
+        );
     }
 
     // ─── Cross-rule: Multiple rules firing together ───────────────────────────
@@ -311,13 +384,17 @@ mod rule_tests {
         ];
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
 
-        let r1 = flash_loan::score(&refs);
+        let r1 = score_r1(&snaps);
         let r2 = tvl_velocity::score(&refs, 0.20);
 
         println!("  Combined attack scores: R1={} R2={}", r1, r2);
         assert!(r1 >= 75, "Rule 1 should fire: {}", r1);
         assert!(r2 >= 75, "Rule 2 should fire: {}", r2);
-        assert!(r1.max(r2) >= 90, "Max score should be >= 90: {}", r1.max(r2));
+        assert!(
+            r1.max(r2) >= 90,
+            "Max score should be >= 90: {}",
+            r1.max(r2)
+        );
     }
 
     // ─── Edge cases ───────────────────────────────────────────────────────────
@@ -325,7 +402,7 @@ mod rule_tests {
     #[test]
     fn all_rules_return_0_on_empty_window() {
         let empty: Vec<&SlotSnapshot> = vec![];
-        assert_eq!(flash_loan::score(&empty), 0);
+        assert_eq!(flash_loan::score(&empty, 0.0), 0);
         assert_eq!(tvl_velocity::score(&empty, 0.20), 0);
         assert_eq!(bridge_spike::score(&empty, 10.0), 0);
     }
@@ -334,7 +411,7 @@ mod rule_tests {
     fn all_rules_return_0_on_single_slot() {
         let snaps = vec![make_snap_with_flash(0, 1_000_000.0, true, 95)];
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(flash_loan::score(&refs), 0);
+        assert_eq!(flash_loan::score(&refs, 1_000_000.0), 0);
         assert_eq!(tvl_velocity::score(&refs, 0.20), 0);
         assert_eq!(bridge_spike::score(&refs, 10.0), 0);
     }
@@ -351,7 +428,7 @@ mod rule_tests {
         ];
         let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
 
-        let r1 = flash_loan::score(&refs);
+        let r1 = flash_loan::score(&refs, 10_000_000.0);
         let r2 = tvl_velocity::score(&refs, 0.20);
         let r3 = bridge_spike::score(&refs, 10.0);
 

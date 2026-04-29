@@ -30,7 +30,8 @@ use crate::types::SlotSnapshot;
 /// # Arguments
 /// * `window` — ordered slice of SlotSnapshots, oldest first, newest last.
 ///              Typically 5 slots from the engine's VecDeque.
-pub fn score(window: &[&SlotSnapshot]) -> u8 {
+/// * `peak_tvl` — persisted per-protocol peak TVL used as the pre-drain baseline.
+pub fn score(window: &[&SlotSnapshot], peak_tvl: f64) -> u8 {
     // Need at least 2 slots to compute a TVL drop
     if window.len() < 2 {
         return 0;
@@ -59,36 +60,43 @@ pub fn score(window: &[&SlotSnapshot]) -> u8 {
 
     // ── Step 2: Compute TVL drop across the window ────────────────────────────
     //
-    // oldest_tvl = TVL at the start of the window (before the attack)
-    // newest_tvl = TVL at the end of the window (after the drain)
-    let oldest_tvl = recent.first().map(|s| s.tvl_usd).unwrap_or(0.0);
+    // Use the persisted peak as baseline so a post-drain window does not
+    // forget the real pre-attack TVL.
+    let baseline_tvl = if peak_tvl > 10_000.0 {
+        peak_tvl
+    } else {
+        recent.first().map(|s| s.tvl_usd).unwrap_or(0.0)
+    };
     let newest_tvl = recent.last().map(|s| s.tvl_usd).unwrap_or(0.0);
 
     // Skip protocols with very low TVL — likely noise, not a real protocol.
     // $10k minimum to avoid false positives on test deployments.
-    if oldest_tvl < 10_000.0 {
+    if baseline_tvl < 10_000.0 {
         return 0;
     }
 
     // TVL went UP or stayed flat — no drain happened
-    if newest_tvl >= oldest_tvl {
+    if newest_tvl >= baseline_tvl {
         return 0;
     }
 
-    let drop_fraction = (oldest_tvl - newest_tvl) / oldest_tvl;
+    let drop_fraction = (baseline_tvl - newest_tvl) / baseline_tvl;
 
     // ── Step 3: Compute base score from TVL drop severity ─────────────────────
     //
     // Graduated thresholds — a 90% drain and a 16% drain are very different.
     // Max base score is 95, not 100, to preserve headroom for future
     // multi-rule correlation in the engine.
+    if drop_fraction < 0.20 {
+        return 0;
+    }
+    
     let base_score: u8 = match () {
-        _ if drop_fraction >= 0.80 => 95,
-        _ if drop_fraction >= 0.50 => 88,
-        _ if drop_fraction >= 0.30 => 80,
-        _ if drop_fraction >= 0.15 => 70,
-        _ if drop_fraction >= 0.05 => 45,
-        _                          => 0,
+    _ if drop_fraction >= 0.80 => 95,
+    _ if drop_fraction >= 0.50 => 88,
+    _ if drop_fraction >= 0.30 => 80,
+    _ if drop_fraction >= 0.20 => 72,  // new bracket replacing the 0.15 one
+    _                          => 0,
     };
 
     if base_score == 0 {
@@ -108,13 +116,24 @@ pub fn score(window: &[&SlotSnapshot]) -> u8 {
     //
     // This means a low-confidence detection NEEDS a large TVL drop to fire.
     // A high-confidence detection (known program ID) fires even on smaller drops.
-    let weighted = (base_score as u16 * max_confidence as u16) / 100;
+    let corroborated = recent.iter().any(|snap| {
+        snap.transactions
+            .iter()
+            .any(|tx| tx.flash_evidence.methods_fired.count_ones() >= 2)
+    });
+    let effective_confidence = if max_confidence >= 70 && corroborated {
+        (max_confidence + 10).min(95)
+    } else {
+        max_confidence
+    };
+
+    let weighted = (base_score as u16 * effective_confidence as u16) / 100;
     weighted.min(95) as u8
 }
 
 /// Diagnostic info for logging — returns human-readable breakdown of why
 /// the rule scored what it did. Called only when score > 0.
-pub fn explain(window: &[&SlotSnapshot]) -> String {
+pub fn explain(window: &[&SlotSnapshot], peak_tvl: f64) -> String {
     if window.len() < 2 {
         return "insufficient window".to_string();
     }
@@ -122,36 +141,59 @@ pub fn explain(window: &[&SlotSnapshot]) -> String {
     let recent_start = window.len().saturating_sub(5);
     let recent = &window[recent_start..];
 
-    let max_confidence = recent.iter().map(|s| s.max_flash_confidence()).max().unwrap_or(0);
+    let max_confidence = recent
+        .iter()
+        .map(|s| s.max_flash_confidence())
+        .max()
+        .unwrap_or(0);
 
     // Find which slot had the flash loan and which method fired
     let flash_detail = recent
         .iter()
         .flat_map(|snap| {
-            snap.transactions.iter().filter(|tx| tx.flash_evidence.detected).map(|tx| {
-                let methods = format!(
-                    "{}{}{}",
-                    if tx.flash_evidence.by_program_id() { "program_id " } else { "" },
-                    if tx.flash_evidence.by_log_keyword() { "log_keyword " } else { "" },
-                    if tx.flash_evidence.by_delta_pattern() { "delta_pattern" } else { "" },
-                );
-                format!(
-                    "slot={} sig={} confidence={} methods=[{}] borrow=${:.0}",
-                    snap.slot,
-                    &tx.signature[..8],
-                    tx.flash_evidence.confidence,
-                    methods.trim(),
-                    tx.flash_evidence.max_borrow_amount as f64 / 1_000_000.0,
-                )
-            })
+            snap.transactions
+                .iter()
+                .filter(|tx| tx.flash_evidence.detected)
+                .map(|tx| {
+                    let methods = format!(
+                        "{}{}{}",
+                        if tx.flash_evidence.by_program_id() {
+                            "program_id "
+                        } else {
+                            ""
+                        },
+                        if tx.flash_evidence.by_log_keyword() {
+                            "log_keyword "
+                        } else {
+                            ""
+                        },
+                        if tx.flash_evidence.by_delta_pattern() {
+                            "delta_pattern"
+                        } else {
+                            ""
+                        },
+                    );
+                    format!(
+                        "slot={} sig={} confidence={} methods=[{}] borrow=${:.0}",
+                        snap.slot,
+                        &tx.signature[..8],
+                        tx.flash_evidence.confidence,
+                        methods.trim(),
+                        tx.flash_evidence.max_borrow_amount as f64 / 1_000_000.0,
+                    )
+                })
         })
         .next()
         .unwrap_or_else(|| "unknown".to_string());
 
-    let oldest_tvl = recent.first().map(|s| s.tvl_usd).unwrap_or(0.0);
+    let baseline_tvl = if peak_tvl > 10_000.0 {
+        peak_tvl
+    } else {
+        recent.first().map(|s| s.tvl_usd).unwrap_or(0.0)
+    };
     let newest_tvl = recent.last().map(|s| s.tvl_usd).unwrap_or(0.0);
-    let drop_pct = if oldest_tvl > 0.0 {
-        (oldest_tvl - newest_tvl) / oldest_tvl * 100.0
+    let drop_pct = if baseline_tvl > 0.0 {
+        (baseline_tvl - newest_tvl) / baseline_tvl * 100.0
     } else {
         0.0
     };
@@ -160,18 +202,22 @@ pub fn explain(window: &[&SlotSnapshot]) -> String {
         "flash_loan=[{}] tvl_drop={:.1}% (${:.0}→${:.0}) window={} slots confidence={}",
         flash_detail,
         drop_pct,
-        oldest_tvl,
+        baseline_tvl,
         newest_tvl,
         recent.len(),
         max_confidence,
     )
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::{CpiMetrics, FlashLoanEvidence, ParsedTransaction, SlotSnapshot};
+
+    fn score_with_peak(snaps: &[SlotSnapshot], peak_tvl: f64) -> u8 {
+        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
+        score(&refs, peak_tvl)
+    }
 
     fn make_tx(is_flash: bool, confidence: u8) -> ParsedTransaction {
         ParsedTransaction {
@@ -202,7 +248,11 @@ mod tests {
             slot,
             protocol: "test_protocol".to_string(),
             tvl_usd: tvl,
-            transactions: if has_flash { vec![make_tx(true, confidence)] } else { vec![] },
+            transactions: if has_flash {
+                vec![make_tx(true, confidence)]
+            } else {
+                vec![]
+            },
             bridge_outflow_usd: 0.0,
             timestamp: 0,
         }
@@ -214,8 +264,7 @@ mod tests {
             make_snap(1, 1_000_000.0, false, 0),
             make_snap(2, 500_000.0, false, 0),
         ];
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(score(&refs), 0);
+        assert_eq!(score_with_peak(&snaps, 1_000_000.0), 0);
     }
 
     #[test]
@@ -224,8 +273,7 @@ mod tests {
             make_snap(1, 1_000_000.0, true, 95),
             make_snap(2, 1_000_000.0, false, 0),
         ];
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(score(&refs), 0);
+        assert_eq!(score_with_peak(&snaps, 1_000_000.0), 0);
     }
 
     #[test]
@@ -234,8 +282,7 @@ mod tests {
             make_snap(1, 1_000_000.0, true, 95),
             make_snap(2, 100_000.0, false, 0), // 90% drop
         ];
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        let s = score(&refs);
+        let s = score_with_peak(&snaps, 1_000_000.0);
         assert!(s >= 80, "expected score >= 80, got {}", s);
     }
 
@@ -245,8 +292,7 @@ mod tests {
             make_snap(1, 1_000_000.0, true, 55), // delta pattern only
             make_snap(2, 840_000.0, false, 0),   // 16% drop
         ];
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        let s = score(&refs);
+        let s = score_with_peak(&snaps, 1_000_000.0);
         // 70 * 55/100 = 38 — well below the 70 alert threshold
         assert!(s < 50, "expected low score, got {}", s);
     }
@@ -257,21 +303,33 @@ mod tests {
             make_snap(1, 5_000.0, true, 95), // $5k TVL — below $10k floor
             make_snap(2, 100.0, false, 0),
         ];
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        assert_eq!(score(&refs), 0);
+        assert_eq!(score_with_peak(&snaps, 5_000.0), 0);
     }
 
     #[test]
     fn flash_loan_in_earlier_slot_drain_in_later_slot() {
         // Flash loan borrow in slot 1, drain in slot 2 — common real pattern
         let snaps = vec![
-            make_snap(1, 1_000_000.0, true, 95),  // flash loan here
-            make_snap(2, 1_000_000.0, false, 0),   // TVL still high (loan repaid)
-            make_snap(3, 200_000.0, false, 0),     // drain happens here (80% drop)
+            make_snap(1, 1_000_000.0, true, 95), // flash loan here
+            make_snap(2, 1_000_000.0, false, 0), // TVL still high (loan repaid)
+            make_snap(3, 200_000.0, false, 0),   // drain happens here (80% drop)
         ];
-        let refs: Vec<&SlotSnapshot> = snaps.iter().collect();
-        let s = score(&refs);
+        let s = score_with_peak(&snaps, 1_000_000.0);
         // Should detect: flash in window, 80% drop across window
         assert!(s >= 75, "expected score >= 75, got {}", s);
+    }
+
+    #[test]
+    fn persisted_peak_beats_post_drain_window_baseline() {
+        let snaps = vec![
+            make_snap(10, 1_100_051.0, true, 80),
+            make_snap(11, 980_000.0, false, 0),
+            make_snap(12, 820_000.0, false, 0),
+            make_snap(13, 700_000.0, false, 0),
+            make_snap(14, 643_157.0, false, 0),
+        ];
+
+        let s = score_with_peak(&snaps, 1_556_920.0);
+        assert!(s >= 70, "persisted peak baseline should fire, got {}", s);
     }
 }
