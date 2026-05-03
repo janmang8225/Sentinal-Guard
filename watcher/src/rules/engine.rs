@@ -231,7 +231,19 @@ pub async fn run(
                 // Prevents alert storms when TVL oscillates across threshold.
                 // After one alert fires for a protocol, suppress for 30s.
                 // ── Per-protocol cooldown ──────────────────────────────────────
-
+                let pause_key = format!("protocol_paused:{}", protocol);
+                let _: Result<(), _> = redis::cmd("SET")
+                    .arg(&pause_key)
+                    .arg(1u8)
+                    .arg("EX")
+                    .arg(300u64)  // 5 minute optimistic pause window
+                    .query_async(&mut redis)
+                    .await;
+                
+                debug!(
+                    "Optimistic pause set for protocol {} — on-chain confirmation in flight",
+                    &protocol[..8]
+                );
                 let cooldown_key = format!("alert_cooldown:{}", protocol);
 
                 let on_cooldown: bool = redis::cmd("EXISTS")
