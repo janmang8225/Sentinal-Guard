@@ -6,8 +6,10 @@ package_manager = "bun"
 resolution = true
 skip-lint = false
 
+
 [programs.localnet]
-sentinel_guardian = "3qkLJYYQfXK1GJWkPicuNtQnsme5WoZYkUfdqYrGrc1y"
+sentinel_guardian = "2Fi9UPVbD77Cr2SerjKkpPtbejYXdaa6D4R3Pjor4kQs"
+mock_protocol     = "HyUb8Ffara4byitYExmbjbA37Ja7By8fECpG6dFyg8Ln"
 [registry]
 url = "https://api.apr.dev"
 

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "programs/sentinel_guardian",
+    "programs/mock_protocol",
     "watcher",
 ]
 resolver = "2"
