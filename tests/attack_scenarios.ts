@@ -7,6 +7,7 @@
 //   3. Correct account ordering matching the Anchor program's #[derive(Accounts)]
 //   4. Keypair persistence (payer/authority/attacker saved to keys/)
 //   5. Robust tx helper with confirmation
+import "dotenv/config";
 import { createHash } from "crypto";
 import {
   Connection, Keypair, PublicKey, Transaction,
@@ -19,8 +20,8 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 
-const RPC_URL = "http://127.0.0.1:8899";
-const WS_URL = "ws://127.0.0.1:8900";
+const RPC_URL = process.env.SOLANA_RPC_URL!;
+const WS_URL = process.env.SOLANA_WS_URL!;
 const STEP_MS = 1_500;
 const USDC = (n: number) => BigInt(Math.floor(n * 1_000_000));
 
@@ -183,17 +184,22 @@ async function main() {
   const watcher = kp("keys/watcher-keypair.json");
 
   // Airdrop to all actors
-  for (const [label, k] of [["payer", payer], ["auth", auth], ["hacker", hacker]] as [string, Keypair][]) {
-    const bal = await conn.getBalance(k.publicKey) / LAMPORTS_PER_SOL;
-    if (bal < 2) { process.stdout.write(`  Airdropping to ${label}...`); await drop(conn, k.publicKey, 5); console.log(" ✓"); }
-  }
+  // Devnet-safe balance check (NO airdrop)
+for (const [label, k] of [["payer", payer], ["auth", auth], ["hacker", hacker]] as [string, Keypair][]) {
+  const bal = await conn.getBalance(k.publicKey) / LAMPORTS_PER_SOL;
 
+  if (bal < 0.5) {
+    console.log(`  ⚠️ ${label} low balance (${bal.toFixed(2)} SOL) — please fund manually`);
+  } else {
+    console.log(`  ${label}: ${bal.toFixed(2)} SOL`);
+  }
+}
   console.log(`${G}✓${RESET} Payer:   ${payer.publicKey.toBase58()}`);
   console.log(`${G}✓${RESET} Auth:    ${auth.publicKey.toBase58()}`);
   console.log(`${G}✓${RESET} Hacker:  ${hacker.publicKey.toBase58()}`);
   console.log(`${G}✓${RESET} Watcher: ${watcher.publicKey.toBase58()}\n`);
 
-  const pid = new PublicKey(process.env.MOCK_PROTOCOL_PROGRAM_ID ?? "3Eue3cN8zMkeCHLiy6KNNSi6AjKdDfJTBsME4md3xcaC");
+const pid = new PublicKey(process.env.MOCK_PROTOCOL_PROGRAM_ID!);
   const [vs] = PublicKey.findProgramAddressSync([Buffer.from("vault_state"), auth.publicKey.toBuffer()], pid);
   const [vault] = PublicKey.findProgramAddressSync([Buffer.from("vault"), auth.publicKey.toBuffer()], pid);
 
@@ -227,10 +233,9 @@ async function main() {
     console.log(`${Y}~${RESET} Vault already initialized`);
   }
 
-  const SENTINEL_PROGRAM_ID = new PublicKey(
-    "2Fi9UPVbD77Cr2SerjKkpPtbejYXdaa6D4R3Pjor4kQs"
-  );
-
+const SENTINEL_PROGRAM_ID = new PublicKey(
+  process.env.SENTINEL_PROGRAM_ID!
+);
   const [sentinelState] = PublicKey.findProgramAddressSync(
     [Buffer.from("sentinel"), auth.publicKey.toBuffer()],
     SENTINEL_PROGRAM_ID
@@ -274,8 +279,8 @@ async function main() {
   // ── Watcher config reminder ───────────────────────────────────────────────
   console.log(`\n${Y}Update watcher .env:${RESET}`);
   console.log(`  WATCHED_PROGRAMS=${pid.toBase58()}`);
-  console.log(`  SOLANA_RPC_URL=http://127.0.0.1:8899`);
-  console.log(`  GEYSER_ENDPOINT=http://127.0.0.1:8899\n`);
+  console.log(`  SOLANA_RPC_URL=${RPC_URL}`);
+  console.log(`  GEYSER_ENDPOINT=${WS_URL}`);
 
   // Wait for user to start watcher
   await new Promise<void>(resolve => {
