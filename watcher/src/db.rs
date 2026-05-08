@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{PgPool, postgres::PgPoolOptions, QueryBuilder};
+use std::collections::HashMap;
 use tracing::info;
 use uuid::Uuid;
 use serde::Serialize;
@@ -230,6 +231,166 @@ pub async fn get_tvl_history(
         LIMIT $2
         "#,
         protocol,
+        limit
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
+
+// ─── Filtered alerts (Problem 1) ──────────────────────────────────────────────
+
+/// Returns (rows, total_count) with all filtering pushed to Postgres.
+pub async fn get_alerts_filtered(
+    pool: &DbPool,
+    limit: i64,
+    offset: i64,
+    min_severity: i16,
+    rule_triggered: Option<&str>,
+    search: Option<&str>,
+) -> Result<(Vec<AlertRow>, i64)> {
+    // ── count ──
+    let mut cqb: QueryBuilder<sqlx::Postgres> =
+        QueryBuilder::new("SELECT COUNT(*) FROM alerts WHERE severity >= ");
+    cqb.push_bind(min_severity);
+    if let Some(r) = rule_triggered {
+        cqb.push(" AND rule_triggered = ").push_bind(r);
+    }
+    if let Some(s) = search {
+        let pat = format!("%{}%", s);
+        cqb.push(" AND (alert_id_hex ILIKE ")
+            .push_bind(pat.clone())
+            .push(" OR on_chain_tx ILIKE ")
+            .push_bind(pat)
+            .push(")");
+    }
+    let total: i64 = cqb.build_query_scalar().fetch_one(pool).await?;
+
+    // ── data ──
+    let mut dqb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        "SELECT id, alert_id_hex, protocol, severity, rule_triggered, \
+         estimated_at_risk_usd, trigger_signatures, slot, watcher_pubkey, \
+         on_chain_tx, created_at FROM alerts WHERE severity >= ",
+    );
+    dqb.push_bind(min_severity);
+    if let Some(r) = rule_triggered {
+        dqb.push(" AND rule_triggered = ").push_bind(r);
+    }
+    if let Some(s) = search {
+        let pat = format!("%{}%", s);
+        dqb.push(" AND (alert_id_hex ILIKE ")
+            .push_bind(pat.clone())
+            .push(" OR on_chain_tx ILIKE ")
+            .push_bind(pat)
+            .push(")");
+    }
+    dqb.push(" ORDER BY created_at DESC LIMIT ")
+        .push_bind(limit)
+        .push(" OFFSET ")
+        .push_bind(offset);
+
+    let rows: Vec<AlertRow> = dqb.build_query_as().fetch_all(pool).await?;
+    Ok((rows, total))
+}
+
+// ─── Stats aggregates (Problem 2) ─────────────────────────────────────────────
+
+#[derive(Debug)]
+pub struct AlertStatsBasic {
+    pub total_alerts: i64,
+    pub alerts_24h: i64,
+    pub total_at_risk_usd: f64,
+    pub avg_severity: f64,
+    pub total_pauses: i64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct RuleCount {
+    pub rule_triggered: String,
+    pub cnt: i64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct SeverityBucketRow {
+    pub low: i64,
+    pub medium: i64,
+    pub high: i64,
+    pub critical: i64,
+    pub extreme: i64,
+}
+
+#[derive(Debug, sqlx::FromRow, Serialize)]
+pub struct AlertTimePoint {
+    pub created_at: DateTime<Utc>,
+    pub severity: i16,
+    pub rule_triggered: String,
+    pub alert_id_hex: String,
+}
+
+pub async fn get_alert_stats_basic(pool: &DbPool) -> Result<AlertStatsBasic> {
+    let row = sqlx::query!(
+        r#"
+        SELECT
+            COUNT(*)::bigint                                                            AS "total_alerts!",
+            COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours')::bigint   AS "alerts_24h!",
+            COALESCE(SUM(estimated_at_risk_usd), 0)                                    AS "total_at_risk_usd!: f64",
+            COALESCE(AVG(severity::float8), 0)                                         AS "avg_severity!: f64",
+            COUNT(*) FILTER (WHERE on_chain_tx IS NOT NULL)::bigint                    AS "total_pauses!"
+        FROM alerts
+        "#
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(AlertStatsBasic {
+        total_alerts: row.total_alerts,
+        alerts_24h: row.alerts_24h,
+        total_at_risk_usd: row.total_at_risk_usd,
+        avg_severity: row.avg_severity,
+        total_pauses: row.total_pauses,
+    })
+}
+
+pub async fn get_alert_stats_by_rule(pool: &DbPool) -> Result<HashMap<String, i64>> {
+    let rows = sqlx::query_as!(
+        RuleCount,
+        r#"SELECT rule_triggered, COUNT(*)::bigint AS "cnt!" FROM alerts GROUP BY rule_triggered"#
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(|r| (r.rule_triggered, r.cnt)).collect())
+}
+
+pub async fn get_alert_stats_buckets(pool: &DbPool) -> Result<SeverityBucketRow> {
+    let row = sqlx::query_as!(
+        SeverityBucketRow,
+        r#"
+        SELECT
+            COUNT(*) FILTER (WHERE severity < 30)::bigint                         AS "low!",
+            COUNT(*) FILTER (WHERE severity >= 30 AND severity < 60)::bigint      AS "medium!",
+            COUNT(*) FILTER (WHERE severity >= 60 AND severity < 75)::bigint      AS "high!",
+            COUNT(*) FILTER (WHERE severity >= 75 AND severity < 90)::bigint      AS "critical!",
+            COUNT(*) FILTER (WHERE severity >= 90)::bigint                        AS "extreme!"
+        FROM alerts
+        "#
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row)
+}
+
+pub async fn get_alert_stats_over_time(pool: &DbPool, limit: i64) -> Result<Vec<AlertTimePoint>> {
+    let rows = sqlx::query_as!(
+        AlertTimePoint,
+        r#"
+        SELECT created_at, severity, rule_triggered, alert_id_hex
+        FROM alerts
+        ORDER BY created_at DESC
+        LIMIT $1
+        "#,
         limit
     )
     .fetch_all(pool)

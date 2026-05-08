@@ -19,6 +19,7 @@ use axum::{
     Json, Router,
 };
 use anyhow::Context;
+use futures::future::join_all;
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -45,6 +46,15 @@ pub struct AppState {
 #[derive(Deserialize)]
 pub struct PaginationQuery {
     limit: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct AlertsQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+    min_severity: Option<i16>,
+    rule_triggered: Option<String>,
+    search: Option<String>,
 }
 
 // ─── Response types ───────────────────────────────────────────────────────────
@@ -92,6 +102,12 @@ pub struct SeverityPoint {
     pub severity: i16,
     pub rule: String,
     pub alert_id_hex: String,
+}
+
+#[derive(Serialize)]
+pub struct AlertsResponse {
+    pub alerts: Vec<crate::db::AlertRow>,
+    pub total: i64,
 }
 
 #[derive(Serialize)]
@@ -223,12 +239,24 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 // ─── Alert endpoints ──────────────────────────────────────────────────────────
 
 async fn get_alerts(
-    Query(params): Query<PaginationQuery>,
+    Query(params): Query<AlertsQuery>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    let limit = params.limit.unwrap_or(100).min(500);
-    match crate::db::get_recent_alerts(&state.db, limit).await {
-        Ok(rows) => Json(rows).into_response(),
+    let limit = params.limit.unwrap_or(50).min(500);
+    let offset = params.offset.unwrap_or(0).max(0);
+    let min_severity = params.min_severity.unwrap_or(0);
+
+    match crate::db::get_alerts_filtered(
+        &state.db,
+        limit,
+        offset,
+        min_severity,
+        params.rule_triggered.as_deref(),
+        params.search.as_deref(),
+    )
+    .await
+    {
+        Ok((alerts, total)) => Json(AlertsResponse { alerts, total }).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
@@ -248,12 +276,14 @@ async fn get_alerts_for_protocol(
 // ─── Protocol endpoints ───────────────────────────────────────────────────────
 
 async fn get_protocols(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut result = Vec::new();
-    let mut redis = state.redis.clone();
-    for protocol in &state.cfg.watched_programs {
-        result.push(build_protocol_info(protocol, &mut redis, &state.db).await);
-    }
-    Json(result)
+    let tasks: Vec<_> = state.cfg.watched_programs.iter().map(|protocol| {
+        let mut redis = state.redis.clone();
+        let db = state.db.clone();
+        let protocol = protocol.clone();
+        async move { build_protocol_info(&protocol, &mut redis, &db).await }
+    }).collect();
+
+    Json(join_all(tasks).await)
 }
 
 async fn get_protocol_detail(
@@ -332,54 +362,47 @@ async fn build_protocol_info(
 // ─── Stats endpoint (Analytics page) ─────────────────────────────────────────
 
 async fn get_stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let rows = match crate::db::get_recent_alerts(&state.db, 10_000).await {
-        Ok(r) => r,
+    let db = &state.db;
+    let (basic, by_rule, buckets, over_time) = match tokio::try_join!(
+        crate::db::get_alert_stats_basic(db),
+        crate::db::get_alert_stats_by_rule(db),
+        crate::db::get_alert_stats_buckets(db),
+        crate::db::get_alert_stats_over_time(db, 1000),
+    ) {
+        Ok(results) => results,
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     };
 
-    let total_alerts = rows.len() as i64;
-    let cutoff_24h = chrono::Utc::now() - chrono::Duration::hours(24);
-    let alerts_24h = rows.iter().filter(|r| r.created_at > cutoff_24h).count() as i64;
-    let total_at_risk_usd: f64 = rows.iter().map(|r| r.estimated_at_risk_usd).sum();
-    let avg_severity = if total_alerts > 0 {
-        rows.iter().map(|r| r.severity as f64).sum::<f64>() / total_alerts as f64
-    } else { 0.0 };
-    let total_pauses = rows.iter().filter(|r| r.on_chain_tx.is_some()).count() as i64;
-    let pause_rate_pct = if total_alerts > 0 {
-        total_pauses as f64 / total_alerts as f64 * 100.0
-    } else { 0.0 };
-
-    let mut by_rule: HashMap<String, i64> = HashMap::new();
-    for row in &rows {
-        *by_rule.entry(row.rule_triggered.clone()).or_insert(0) += 1;
-    }
-
-    let severity_buckets = SeverityBuckets {
-        low:      rows.iter().filter(|r| r.severity < 30).count() as i64,
-        medium:   rows.iter().filter(|r| r.severity >= 30 && r.severity < 60).count() as i64,
-        high:     rows.iter().filter(|r| r.severity >= 60 && r.severity < 75).count() as i64,
-        critical: rows.iter().filter(|r| r.severity >= 75 && r.severity < 90).count() as i64,
-        extreme:  rows.iter().filter(|r| r.severity >= 90).count() as i64,
+    let pause_rate_pct = if basic.total_alerts > 0 {
+        basic.total_pauses as f64 / basic.total_alerts as f64 * 100.0
+    } else {
+        0.0
     };
 
-    let severity_over_time: Vec<SeverityPoint> = rows.iter().rev().map(|r| SeverityPoint {
+    let severity_over_time: Vec<SeverityPoint> = over_time.into_iter().rev().map(|r| SeverityPoint {
         timestamp: r.created_at.to_rfc3339(),
         severity: r.severity,
-        rule: r.rule_triggered.clone(),
-        alert_id_hex: r.alert_id_hex.clone(),
+        rule: r.rule_triggered,
+        alert_id_hex: r.alert_id_hex,
     }).collect();
 
     Json(StatsResponse {
-        total_alerts,
-        total_at_risk_usd,
-        avg_severity,
-        avg_response_ms: 2800.0, // placeholder — store pause confirmation time in DB for real value
+        total_alerts: basic.total_alerts,
+        total_at_risk_usd: basic.total_at_risk_usd,
+        avg_severity: basic.avg_severity,
+        avg_response_ms: 2800.0,
         pause_rate_pct,
-        total_pauses_executed: total_pauses,
+        total_pauses_executed: basic.total_pauses,
         protocols_monitored: state.cfg.watched_programs.len() as i64,
-        alerts_24h,
+        alerts_24h: basic.alerts_24h,
         by_rule,
-        severity_buckets,
+        severity_buckets: SeverityBuckets {
+            low:      buckets.low,
+            medium:   buckets.medium,
+            high:     buckets.high,
+            critical: buckets.critical,
+            extreme:  buckets.extreme,
+        },
         severity_over_time,
     }).into_response()
 }
