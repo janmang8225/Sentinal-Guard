@@ -36,7 +36,7 @@ export default function AlertsPage() {
 
   const RulesPanelContent = () => (
     <>
-      <div className="flex items-center justify-between p-6 border-b border-[var(--border-default)] bg-[var(--bg-base)] shrink-0">
+      <div className="flex items-center justify-between p-6 border-b border-border-default bg-surface shrink-0 sticky top-0 z-10">
         <h3 className="font-display font-bold text-[18px] text-primary flex items-center gap-2">
           <BookOpen size={18} className="text-brand-primary" />
           Rules Reference
@@ -49,8 +49,8 @@ export default function AlertsPage() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
-        <div className="bg-[var(--bg-base)] border border-[var(--border-default)] rounded-[12px] p-5 shadow-sm hover:border-[var(--border-strong)] transition-colors">
+      <div className="flex-1 overflow-y-auto p-6 space-y-5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border-strong [&::-webkit-scrollbar-thumb]:rounded-full">
+        <div className="bg-surface border border-border-strong rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-[11px] font-bold tracking-wider uppercase bg-brand-light text-brand-primary px-2 py-0.5 rounded border border-brand-primary/20">R1</span>
             <div className="text-[15px] font-bold text-primary">Flash Loan + Drain</div>
@@ -60,7 +60,7 @@ export default function AlertsPage() {
           </div>
         </div>
 
-        <div className="bg-[var(--bg-base)] border border-[var(--border-default)] rounded-[12px] p-5 shadow-sm hover:border-[var(--border-strong)] transition-colors">
+        <div className="bg-surface border border-border-strong rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-[11px] font-bold tracking-wider uppercase bg-brand-light text-brand-primary px-2 py-0.5 rounded border border-brand-primary/20">R2</span>
             <div className="text-[15px] font-bold text-primary">TVL Velocity</div>
@@ -70,9 +70,9 @@ export default function AlertsPage() {
           </div>
         </div>
 
-        <div className="bg-[var(--bg-base)] border border-[var(--border-default)] rounded-[12px] p-5 shadow-sm hover:border-[var(--border-strong)] transition-colors">
+        <div className="bg-surface border border-border-strong rounded-xl p-5 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
           <div className="flex items-center gap-3 mb-3">
-            <span className="text-[11px] font-bold tracking-wider uppercase bg-surface text-tertiary px-2 py-0.5 rounded border border-border-default">R3</span>
+            <span className="text-[11px] font-bold tracking-wider uppercase bg-subtle text-tertiary px-2 py-0.5 rounded border border-border-default">R3</span>
             <div className="text-[15px] font-bold text-primary">Bridge Outflow Spike</div>
           </div>
           <div className="text-[13px] text-secondary leading-relaxed">
@@ -145,8 +145,8 @@ export default function AlertsPage() {
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 340, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-            className="hidden lg:block shrink-0 border-l border-[var(--border-strong)] bg-surface relative z-20 overflow-hidden"
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="hidden lg:block shrink-0 border-l border-border-default bg-surface relative z-20 overflow-hidden shadow-sm"
           >
             <div className="w-[340px] h-full flex flex-col">
               <RulesPanelContent />
@@ -165,7 +165,7 @@ export default function AlertsPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="lg:hidden absolute inset-0 bg-black/10 z-30"
+              className="lg:hidden absolute inset-0 bg-[#0f172a]/32 backdrop-blur-[2px] z-30"
               onClick={() => setShowRules(false)}
             />
 
@@ -175,7 +175,7 @@ export default function AlertsPage() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="lg:hidden absolute top-0 right-0 h-full w-full sm:w-[360px] bg-surface border-l border-[var(--border-strong)] z-40 flex flex-col shadow-2xl"
+              className="lg:hidden absolute top-0 right-0 h-full w-full sm:w-[360px] bg-surface border-l border-border-default z-40 flex flex-col shadow-2xl"
             >
               <RulesPanelContent />
             </motion.div>

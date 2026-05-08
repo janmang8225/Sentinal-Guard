@@ -18,6 +18,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use anyhow::Context;
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -148,7 +149,14 @@ pub async fn run(
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", cfg.api_port);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .with_context(|| {
+            format!(
+                "Threat feed API failed to bind {}. Another process may already be using this port. Set API_PORT to a free port or stop the conflicting process.",
+                addr
+            )
+        })?;
     info!("Threat feed API listening on {}", addr);
     axum::serve(listener, app).await?;
     Ok(())

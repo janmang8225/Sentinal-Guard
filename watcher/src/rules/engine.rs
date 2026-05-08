@@ -137,6 +137,19 @@ pub async fn run(
                         snap.bridge_outflow_usd += bridge_outflow;
                     }
                 } else {
+                    // Record the finalized TVL for the previous slot into the database
+                    if let Some(last_snap) = window.back() {
+                        let pool = db.clone();
+                        let p = protocol.clone();
+                        let t = last_snap.tvl_usd;
+                        let s = last_snap.slot;
+                        tokio::spawn(async move {
+                            if let Err(e) = crate::db::insert_tvl_snapshot(&pool, &p, t, s).await {
+                                tracing::warn!("Failed to insert TVL snapshot: {}", e);
+                            }
+                        });
+                    }
+
                     if window.len() >= cfg.window_size {
                         window.pop_front(); // evict oldest slot
                     }

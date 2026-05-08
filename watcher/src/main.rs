@@ -33,6 +33,7 @@ mod gyser_grpc;
 
 use anyhow::Result;
 use solana_sdk::signer::Signer;
+use std::io::ErrorKind;
 use tokio::sync::broadcast;
 use tracing::{error, info};
 
@@ -177,6 +178,11 @@ async fn main() -> Result<()> {
                     redis4.clone(),
                     cfg4.clone(),
                 ).await {
+                    if is_addr_in_use(&e) {
+                        error!("API server startup failed: {}", e);
+                        error!("Threat feed API task stopped until the port conflict is resolved.");
+                        break;
+                    }
                     error!("API server crashed: {} — restarting in 2s", e);
                     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 }
@@ -198,4 +204,12 @@ fn print_banner() {
     info!("║    SentinelGuard Watcher  v{}           ║", env!("CARGO_PKG_VERSION"));
     info!("║    Real-time Solana exploit detector      ║");
     info!("╚═══════════════════════════════════════════╝");
+}
+
+fn is_addr_in_use(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io_err| io_err.kind() == ErrorKind::AddrInUse)
+    })
 }

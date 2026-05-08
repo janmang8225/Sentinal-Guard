@@ -111,7 +111,7 @@ export default function AlertTable({ onSelect, rule, minSeverity = 0, searchTerm
 
   return (
     <div className="bg-surface border border-[var(--border-default)] rounded-[12px] shadow-[var(--shadow-sm)] flex flex-col h-full overflow-hidden">
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border-strong [&::-webkit-scrollbar-thumb]:rounded-full">
         <table className="w-full text-left border-collapse min-w-[850px]">
           <thead className="sticky top-0 z-10 bg-surface shadow-[0_1px_0_var(--border-default)]">
             <tr className="text-[11px] text-tertiary font-bold tracking-wider uppercase">
