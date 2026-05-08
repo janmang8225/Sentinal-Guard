@@ -3,26 +3,29 @@ import { getWatcherHttpUrl, mapWatcherAlert, type WatcherAlertRow } from '@/lib/
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const limit = parseInt(searchParams.get('limit') ?? '50');
-  const offset = parseInt(searchParams.get('offset') ?? '0');
+
+  const params = new URLSearchParams({
+    limit: String(Math.min(parseInt(searchParams.get('limit') ?? '25'), 500)),
+    offset: String(Math.max(parseInt(searchParams.get('offset') ?? '0'), 0)),
+    min_severity: searchParams.get('min_severity') ?? '0',
+  });
+
   const rule = searchParams.get('rule_triggered');
-  const minSeverity = parseInt(searchParams.get('min_severity') ?? '0');
+  if (rule) params.set('rule_triggered', rule);
+
+  const search = searchParams.get('search');
+  if (search) params.set('search', search);
 
   try {
-    const upstream = await fetch(`${getWatcherHttpUrl()}/alerts?limit=500`, { cache: 'no-store' });
+    const upstream = await fetch(`${getWatcherHttpUrl()}/alerts?${params}`, { cache: 'no-store' });
     if (!upstream.ok) {
       return NextResponse.json({ error: 'Watcher alerts request failed' }, { status: upstream.status });
     }
 
-    const rows = (await upstream.json()) as WatcherAlertRow[];
-    const filtered = rows
-      .map(mapWatcherAlert)
-      .filter((alert) => alert.severity >= minSeverity)
-      .filter((alert) => !rule || alert.rule_triggered === rule);
-
+    const data = (await upstream.json()) as { alerts: WatcherAlertRow[]; total: number };
     return NextResponse.json({
-      alerts: filtered.slice(offset, offset + limit),
-      total: filtered.length,
+      alerts: data.alerts.map(mapWatcherAlert),
+      total: data.total,
     });
   } catch {
     return NextResponse.json({ alerts: [], total: 0, error: 'Watcher unavailable' }, { status: 503 });

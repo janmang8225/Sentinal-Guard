@@ -76,25 +76,13 @@ export default function AlertTable({ onSelect, rule, minSeverity = 0, searchTerm
       });
 
       if (rule) params.set('rule_triggered', rule);
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
 
       const response = await fetch(`/api/alerts?${params.toString()}`, { cache: 'no-store' });
       const payload = await response.json();
-      
-      let fetchedAlerts = Array.isArray(payload.alerts) ? payload.alerts as UiAlert[] : [];
-      let fetchedTotal = typeof payload.total === 'number' ? payload.total : 0;
 
-      // Client-side filtering for search term if API doesn't support it
-      if (searchTerm.trim()) {
-        const lowerSearch = searchTerm.toLowerCase();
-        fetchedAlerts = fetchedAlerts.filter(a => 
-          a.id.toLowerCase().includes(lowerSearch) || 
-          (a.pause_tx && a.pause_tx.toLowerCase().includes(lowerSearch))
-        );
-        fetchedTotal = fetchedAlerts.length; // Approximate total after search
-      }
-
-      setAlerts(fetchedAlerts);
-      setTotal(fetchedTotal);
+      setAlerts(Array.isArray(payload.alerts) ? payload.alerts as UiAlert[] : []);
+      setTotal(typeof payload.total === 'number' ? payload.total : 0);
     } catch {
       setAlerts([]);
       setTotal(0);
