@@ -598,20 +598,26 @@ async function main() {
 
   await scenario(7, "Flash + aggressive drain — Rule 1 AND Rule 2 both fire (max severity)", async () => {
     const tvl    = await usdcBal(conn, vault);
-    const borrow = USDC(tvl * 0.6);
-    const drain  = USDC(tvl * 0.55); // >20% velocity AND >15% flash threshold
+    // Borrow 40% — leaves 60% in vault. Drain 55% of original TVL from the remaining 60%.
+    // This satisfies Rule 2 (>20% TVL drop) AND Rule 1 (flash + >15% drop).
+    // Drain must be < post-borrow vault balance (60% of TVL).
+    const borrow     = USDC(tvl * 0.40);
+    const drainAmt   = tvl * 0.55; // 55% of original — well above both thresholds
+    const postBorrow = tvl * 0.60; // what remains in vault after borrow
+    // Safety: cap drain to 95% of post-borrow balance so tx never hits insufficient funds
+    const drain = USDC(Math.min(drainAmt, postBorrow * 0.95));
     await mintTo(conn, payer, mint, hackerAta.address, payer, USDC(10_000));
 
     await sendTx(conn, ixFlashBorrow(pid, vs, vault, hackerAta.address, hacker.publicKey, auth.publicKey, borrow), [payer, hacker]);
-    console.log(`  flash_borrow 600k ✓`);
+    console.log(`  flash_borrow $${(tvl * 0.40).toLocaleString()} ✓  vault=$${(await usdcBal(conn, vault)).toLocaleString()}`);
     await sleep(400);
 
     await sendTx(conn, ixDrain(pid, vs, vault, hackerAta.address, auth.publicKey, drain), [payer]);
-    console.log(`  drain 550k ✓  vault=$${(await usdcBal(conn, vault)).toLocaleString()}`);
+    console.log(`  drain $${(Number(drain) / 1e6).toLocaleString()} ✓  vault=$${(await usdcBal(conn, vault)).toLocaleString()}`);
     await sleep(400);
 
     await sendTx(conn, ixFlashRepay(pid, vs, vault, hackerAta.address, hacker.publicKey, auth.publicKey, borrow), [payer, hacker]);
-    console.log(`  flash_repay ✓`);
+    console.log(`  flash_repay ✓  vault=$${(await usdcBal(conn, vault)).toLocaleString()}`);
 
     await sleep(STEP_MS * 3);
     console.log(`  ${R}Expected: BOTH Rule 1 (score>=75) AND Rule 2 (score>=75) fire${RESET}`);

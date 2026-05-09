@@ -1,6 +1,6 @@
-import type {Metadata} from 'next';
+import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
-import './globals.css'; // Global styles
+import './globals.css';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -14,13 +14,28 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'SentinelGuard | Real-Time Solana Security',
-  description: 'SentinelGuard watches Solana DeFi protocols in real time, detecting exploits and autonomously pausing protocols.',
+  description:
+    'SentinelGuard watches Solana DeFi protocols in real time, detecting exploits and autonomously pausing protocols.',
 };
 
-export default function RootLayout({children}: {children: React.ReactNode}) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${jetbrainsMono.variable} font-body bg-base text-primary antialiased`} suppressHydrationWarning>
+      <head>
+        <meta
+          name="google-site-verification"
+          content="aHVJ6mGQdeo9WO_RHlVqE4t0om6HS5a65u3IITEbU0k"
+        />
+      </head>
+
+      <body
+        className={`${inter.variable} ${jetbrainsMono.variable} font-body bg-base text-primary antialiased`}
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>
