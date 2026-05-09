@@ -11,8 +11,10 @@ Cargo.lock
 target/deploy/
 target/idl/
 test-ledger/
-*.json
-
+# Anchor / Solana
+target/deploy/
+target/idl/
+test-ledger/
 # BUT keep keypair if needed manually (optional)
 # !keys/watcher-keypair.json
 

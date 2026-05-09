@@ -1,0 +1,6 @@
+{
+  "name": "SentinelGuard",
+  "description": "A real-time Solana blockchain security system dashboard that detects flash loans, TVL velocity anomalies, and bridge outflow spikes, allowing autonomous pause of protocols on-chain.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
