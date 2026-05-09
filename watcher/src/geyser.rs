@@ -234,16 +234,35 @@ fn write_tvl_to_redis(parsed: &ParsedTransaction, cfg: &Config, redis: &mut Conn
         .cloned();
     let Some(protocol) = protocol else { return };
 
-    // Mint-agnostic TVL proxy: the vault is the largest positive token balance
-    // touched by the transaction. This works with mock mints in local tests.
+    let configured_vault_balance_usd = parsed
+        .token_deltas
+        .iter()
+        .filter(|d| cfg.vault_accounts.contains(&d.account) && d.after > 0)
+        .map(|d| d.after as f64 / 1_000_000.0)
+        .fold(0f64, f64::max);
+
+    // Mint-agnostic TVL proxy: prefer explicitly configured vault accounts, but
+    // fall back to the largest positive token balance touched by the tx. A stale
+    // VAULT_ACCOUNTS entry should degrade detection quality, not disable it.
+    let fallback_balance_usd = largest_token_balance_usd_from_tx(parsed);
     let vault_balance_usd = if !cfg.vault_accounts.is_empty() {
-     parsed.token_deltas
-            .iter()
-            .filter(|d| cfg.vault_accounts.contains(&d.account) && d.after > 0)
-            .map(|d| d.after as f64/ 1_000_000.0)
-            .fold(0f64, f64::max)
-    }else {
-        largest_token_balance_usd_from_tx(parsed)
+        if configured_vault_balance_usd > 0.0 {
+            configured_vault_balance_usd
+        } else {
+            debug!(
+                "No configured vault delta matched in tx {}. Falling back to largest token balance. configured_vaults={:?} touched_accounts={:?}",
+                &parsed.signature[..8],
+                cfg.vault_accounts,
+                parsed
+                    .token_deltas
+                    .iter()
+                    .map(|d| d.account.as_str())
+                    .collect::<Vec<_>>(),
+            );
+            fallback_balance_usd
+        }
+    } else {
+        fallback_balance_usd
     };
 
     if vault_balance_usd < 100.0 {
