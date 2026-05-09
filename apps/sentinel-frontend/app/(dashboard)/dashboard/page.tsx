@@ -1,72 +1,55 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import StatsRow from '@/components/dashboard/StatsRow';
-import TVLChart from '@/components/dashboard/TVLChart';
-import AlertFeed from '@/components/dashboard/AlertFeed';
+import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Calendar } from 'lucide-react';
 import CustomDropdown from '@/components/shared/CustomDropdown';
 import { MOCK_PROTOCOL_ID } from '@/lib/constants';
 
-export default function DashboardPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState('Last 24 Hours');
+const StatsRow = dynamic(() => import('@/components/dashboard/StatsRow'), {
+  loading: () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="bg-surface border border-border-default rounded-[12px] p-[20px_24px] shadow-sm animate-pulse">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-[40px] h-[40px] rounded-[10px] bg-border-default/50" />
+            <div className="h-4 w-28 rounded bg-border-default/50" />
+          </div>
+          <div className="h-9 w-16 rounded bg-border-default/50 mb-2" />
+          <div className="h-4 w-24 rounded bg-border-default/40" />
+        </div>
+      ))}
+    </div>
+  ),
+});
 
-  useEffect(() => {
-    // Simulate initial data fetching
-    const timer = setTimeout(() => setIsLoading(false), 1200);
-    return () => clearTimeout(timer);
-  }, []);
+const TVLChart = dynamic(() => import('@/components/dashboard/TVLChart'), {
+  loading: () => <div className="bg-surface border border-border-default rounded-[12px] h-[360px] animate-pulse" />,
+});
+
+const AlertFeed = dynamic(() => import('@/components/dashboard/AlertFeed'), {
+  loading: () => <div className="bg-surface border border-border-default rounded-[12px] h-[360px] animate-pulse" />,
+});
+
+export default function DashboardPage() {
+  const [timeRange, setTimeRange] = useState('Last 24 Hours');
 
   return (
     <div className="flex flex-col">
-      {/* Date Range Picker Control */}
       <div className="flex justify-end mb-6">
-        <CustomDropdown 
-          value={timeRange} 
-          onChange={setTimeRange} 
-          options={['Last 24 Hours', 'Last 7 Days', 'Last 30 Days', 'All Time']} 
+        <CustomDropdown
+          value={timeRange}
+          onChange={setTimeRange}
+          options={['Last 24 Hours', 'Last 7 Days', 'Last 30 Days', 'All Time']}
           icon={<Calendar size={14} className="text-secondary" />}
         />
       </div>
 
-      {isLoading ? (
-        <div className="space-y-6">
-          {/* Skeleton Stats Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-[24px]">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-surface border border-border-default rounded-[16px] p-[24px] h-[120px] animate-pulse">
-                <div className="w-24 h-4 bg-border-default rounded mb-4"></div>
-                <div className="w-16 h-8 bg-border-default rounded"></div>
-              </div>
-            ))}
-          </div>
-          
-          {/* Skeleton Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 items-start">
-            <div className="bg-surface border border-border-default rounded-[16px] h-[400px] animate-pulse p-6">
-              <div className="w-32 h-6 bg-border-default rounded mb-8"></div>
-              <div className="w-full h-[280px] bg-subtle rounded"></div>
-            </div>
-            <div className="bg-surface border border-border-default rounded-[16px] h-[400px] animate-pulse p-6">
-              <div className="w-24 h-6 bg-border-default rounded mb-6"></div>
-              <div className="space-y-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="w-full h-16 bg-subtle rounded"></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <>
-          <StatsRow />
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 mt-6 items-start">
-            <TVLChart protocol={MOCK_PROTOCOL_ID} />
-            <AlertFeed />
-          </div>
-        </>
-      )}
+      <StatsRow />
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 mt-6 items-start">
+        <TVLChart protocol={MOCK_PROTOCOL_ID} />
+        <AlertFeed />
+      </div>
     </div>
   );
 }

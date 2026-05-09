@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SENTINEL_STATE_PDA } from '@/lib/constants';
 import { Copy, AlertTriangle, X, CheckCircle } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
 import { timeAgo, truncateAddress } from '@/lib/utils';
 import type { ProtocolStatus, WatcherConfig } from '@/lib/watcher';
 
@@ -216,23 +215,13 @@ export default function ControlsPage() {
         </div>
       </div>
 
-      {/* Pause Confirmation Modal */}
-      <AnimatePresence>
-        {showPauseModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-[#0f172a]/40 backdrop-blur-sm"
-              onClick={() => { setShowPauseModal(false); setConfirmText(''); }}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-[440px] bg-[var(--bg-surface)] rounded-[16px] shadow-[var(--shadow-lg)] border border-border-default overflow-hidden flex flex-col"
-            >
+      {showPauseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-[#0f172a]/40 backdrop-blur-sm"
+            onClick={() => { setShowPauseModal(false); setConfirmText(''); }}
+          />
+          <div className="relative w-full max-w-[440px] bg-[var(--bg-surface)] rounded-[16px] shadow-[var(--shadow-lg)] border border-border-default overflow-hidden flex flex-col">
               <div className="p-6 border-b border-border-default flex items-center gap-3 text-[var(--severity-critical-dot)]">
                 <AlertTriangle size={20} />
                 <h2 className="font-display font-bold text-[18px] text-primary">Emergency Pause</h2>
@@ -280,10 +269,9 @@ export default function ControlsPage() {
                   </button>
                 </div>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+            </div>
+        </div>
+      )}
     </>
   );
 }

@@ -5,7 +5,6 @@ import AlertTable from '@/components/dashboard/AlertTable';
 import CustomDropdown from '@/components/shared/CustomDropdown';
 import AlertModal from '@/components/dashboard/AlertModal';
 import { Search, X, BookOpen } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import type { UiAlert } from '@/lib/watcher';
 
 // Map dropdown label → watcher rule_triggered key
@@ -138,50 +137,25 @@ export default function AlertsPage() {
         </div>
       </div>
 
-      {/* Rules Reference - Desktop (Split Layout) */}
-      <AnimatePresence>
-        {showRules && (
-          <motion.div 
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 340, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="hidden lg:block shrink-0 border-l border-border-default bg-surface relative z-20 overflow-hidden shadow-sm"
-          >
-            <div className="w-[340px] h-full flex flex-col">
-              <RulesPanelContent />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {showRules && (
+        <div className="hidden lg:block shrink-0 border-l border-border-default bg-surface relative z-20 overflow-hidden shadow-sm w-[340px]">
+          <div className="w-[340px] h-full flex flex-col">
+            <RulesPanelContent />
+          </div>
+        </div>
+      )}
 
-      {/* Rules Reference - Mobile/Tablet (Overlay Layout) */}
-      <AnimatePresence>
-        {showRules && (
-          <>
-            {/* Subtle dim overlay without heavy blur */}
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="lg:hidden absolute inset-0 bg-[#0f172a]/32 backdrop-blur-[2px] z-30"
-              onClick={() => setShowRules(false)}
-            />
-
-            {/* Mobile/Tablet Drawer */}
-            <motion.div 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="lg:hidden absolute top-0 right-0 h-full w-full sm:w-[360px] bg-surface border-l border-border-default z-40 flex flex-col shadow-2xl"
-            >
-              <RulesPanelContent />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {showRules && (
+        <>
+          <div
+            className="lg:hidden absolute inset-0 bg-[#0f172a]/32 backdrop-blur-[2px] z-30"
+            onClick={() => setShowRules(false)}
+          />
+          <div className="lg:hidden absolute top-0 right-0 h-full w-full sm:w-[360px] bg-surface border-l border-border-default z-40 flex flex-col shadow-2xl">
+            <RulesPanelContent />
+          </div>
+        </>
+      )}
 
       <AlertModal alert={selectedAlert} onClose={() => setSelectedAlert(null)} />
     </div>
