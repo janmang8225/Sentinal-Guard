@@ -69,6 +69,10 @@ export default function StatsRow() {
     return () => { cancelled = true; window.clearInterval(interval); };
   }, []);
 
+  const pauseRate = Number(stats?.pause_rate_pct ?? 0).toFixed(1);
+  const avgResponseTimeMs = Number(stats?.avg_response_time_ms ?? 0).toFixed(0);
+  const avgResponseTimeSparkBase = Number(stats?.avg_response_time_ms ?? 0);
+
   const cards = stats
     ? [
         {
@@ -94,7 +98,7 @@ export default function StatsRow() {
         {
           title: 'PAUSES EXECUTED',
           value: String(stats.total_pauses_executed),
-          subtitle: `${stats.pause_rate_pct.toFixed(1)}% pause rate`,
+          subtitle: `${pauseRate}% pause rate`,
           icon: Lock,
           accentColor: 'var(--brand-primary)',
           borderColor: 'var(--brand-primary)',
@@ -103,12 +107,12 @@ export default function StatsRow() {
         },
         {
           title: 'AVG RESPONSE TIME',
-          value: `${(stats.avg_response_ms / 1000).toFixed(1)}s`,
+          value: `${avgResponseTimeMs}ms`,
           subtitle: 'Detection to pause',
           icon: Clock,
           accentColor: 'var(--text-tertiary)',
           borderColor: 'transparent',
-          sparkData: makeSparkData(stats.avg_response_ms, 14, 11),
+          sparkData: makeSparkData(avgResponseTimeSparkBase, 14, 11),
           sparkColor: 'var(--text-secondary)',
         },
       ]

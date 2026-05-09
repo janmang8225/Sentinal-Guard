@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import type { UiAlert, WatcherStats } from '@/lib/watcher';
+import { normalizeUiAlert, type UiAlert, type WatcherStats } from '@/lib/watcher';
 
 const AnalyticsContent = dynamic(() => import('@/components/dashboard/AnalyticsContent'), {
   loading: () => (
@@ -33,7 +33,7 @@ export default function AnalyticsPage() {
       fetch('/api/stats').then((r) => r.json()),
     ])
       .then(([alertsPayload, statsPayload]) => {
-        setAlerts(alertsPayload.alerts ?? []);
+        setAlerts(Array.isArray(alertsPayload.alerts) ? alertsPayload.alerts.map(normalizeUiAlert) : []);
         setStats(statsPayload);
         setLoading(false);
       })

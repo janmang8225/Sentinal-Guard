@@ -5,7 +5,7 @@ import RuleBadge from '@/components/shared/RuleBadge';
 import SeverityBadge from '@/components/shared/SeverityBadge';
 import ExplorerLink from '@/components/shared/ExplorerLink';
 import { getRuleTitle, timeAgo } from '@/lib/utils';
-import { getWatcherWsUrl, mapWatcherAlert, type UiAlert, type WatcherAlertRow } from '@/lib/watcher';
+import { getWatcherWsUrl, mapWatcherAlert, normalizeUiAlert, type UiAlert, type WatcherAlertRow } from '@/lib/watcher';
 
 export default function AlertFeed({ onSelect }: { onSelect?: (alert: UiAlert) => void }) {
   const [alerts, setAlerts] = useState<UiAlert[]>([]);
@@ -20,7 +20,7 @@ export default function AlertFeed({ onSelect }: { onSelect?: (alert: UiAlert) =>
         const response = await fetch('/api/alerts?limit=10', { cache: 'no-store' });
         const payload = await response.json();
         if (!closed && Array.isArray(payload.alerts)) {
-          setAlerts(payload.alerts);
+          setAlerts(payload.alerts.map(normalizeUiAlert));
         }
       } catch {
         if (!closed) {
@@ -100,7 +100,7 @@ export default function AlertFeed({ onSelect }: { onSelect?: (alert: UiAlert) =>
                 Slot #{alert.slot} · At risk: ${Math.round(alert.at_risk_amount / 1000)}K USDC
               </div>
               <div className="font-mono text-[13px] text-secondary mt-1">
-                On-chain tx: {alert.pause_tx ? <ExplorerLink signature={alert.pause_tx} /> : 'Pending'}
+                On-chain tx: {alert.pause_tx_signature ? <ExplorerLink signature={alert.pause_tx_signature} href={alert.explorer_url ?? alert.tx_url} /> : 'Pending'}
               </div>
             </div>
           </button>

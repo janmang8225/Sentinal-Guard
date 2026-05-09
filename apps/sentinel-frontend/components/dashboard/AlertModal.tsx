@@ -11,6 +11,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 export default function AlertModal({ alert, onClose }: { alert: UiAlert | null; onClose: () => void }) {
   const [copiedId, setCopiedId] = useState(false);
   const [copiedTx, setCopiedTx] = useState(false);
+  const timeline = alert?.timeline?.length
+    ? alert.timeline
+    : [
+        { label: 'Detection triggered', status: 'done' },
+        { label: alert?.pause_tx_signature ? 'Pause tx confirmed' : 'Awaiting pause execution', status: alert?.pause_tx_signature ? 'done' : 'pending' },
+      ];
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -159,83 +165,96 @@ export default function AlertModal({ alert, onClose }: { alert: UiAlert | null; 
               <div>
                 <h4 className="text-[11px] font-bold uppercase text-[var(--text-tertiary)] tracking-wider mb-4">Activity Feed</h4>
                 <div className="relative pl-6 space-y-8 before:absolute before:inset-y-3 before:left-[11px] before:w-px before:bg-[var(--border-strong)] before:border-l before:border-dashed">
-                  
-                  {/* Detection */}
-                  <div className="relative group">
-                    <div style={{ backgroundColor: '#ffffff' }} className="absolute -left-[30px] top-0.5 p-1 rounded-full border border-status-active shadow-sm group-hover:scale-110 transition-transform">
-                      <div className="w-2 h-2 bg-status-active rounded-full" />
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4">
-                      <div>
-                        <div className="text-[14px] font-bold text-[var(--text-primary)] mb-0.5">Anomaly Detected</div>
-                        <div className="text-[13px] text-[var(--text-tertiary)]">Watcher engine triggered <span className="font-mono text-[var(--text-secondary)]">{alert.rule_triggered}</span> rule.</div>
-                      </div>
-                      <span style={{ backgroundColor: '#f0f4ff' }} className="text-[12px] text-[var(--text-tertiary)] font-mono shrink-0 px-2 py-0.5 rounded border border-[var(--border-default)] mt-1 sm:mt-0 self-start">
-                        {new Date(alert.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}
-                      </span>
-                    </div>
-                  </div>
+                  {timeline.map((entry, index) => {
+                    const isDone = entry.status === 'done';
+                    const isPauseStep = /pause/i.test(entry.label);
 
-                  {/* Pause Action */}
-                  <div className="relative group">
-                    <div style={{ backgroundColor: '#ffffff' }} className={`absolute -left-[30px] top-0.5 p-1 rounded-full border shadow-sm group-hover:scale-110 transition-transform ${alert.pause_tx ? 'border-status-paused' : 'border-[var(--border-strong)]'}`}>
-                      <div className={`w-2 h-2 rounded-full ${alert.pause_tx ? 'bg-status-paused' : 'bg-[var(--border-strong)]'}`} />
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4">
-                      <div className="w-full">
-                        <div className={`text-[14px] font-bold mb-0.5 ${alert.pause_tx ? 'text-status-paused' : 'text-[var(--text-secondary)]'}`}>
-                          {alert.pause_tx ? 'Protocol Paused' : 'Evaluating Threat'}
+                    return (
+                      <div key={`${entry.label}-${index}`} className="relative group">
+                        <div style={{ backgroundColor: '#ffffff' }} className={`absolute -left-[30px] top-0.5 p-1 rounded-full border shadow-sm group-hover:scale-110 transition-transform ${isDone ? 'border-status-paused' : 'border-[var(--border-strong)]'}`}>
+                          <div className={`w-2 h-2 rounded-full ${isDone ? 'bg-status-paused' : 'bg-[var(--border-strong)]'}`} />
                         </div>
-                        <div className="text-[13px] text-[var(--text-tertiary)]">
-                          {alert.pause_tx ? 'Sentinel executed emergency pause via authority.' : 'Awaiting confirmation to execute pause.'}
-                        </div>
-                        
-                        {/* On-chain Transaction Details */}
-                        {alert.pause_tx && (
-                          <div style={{ backgroundColor: '#f0f4ff' }} className="mt-4 border border-[var(--border-default)] rounded-[12px] p-3.5 flex flex-wrap items-center justify-between gap-3 group/tx hover:border-[var(--border-strong)] transition-colors">
-                             <div className="flex items-center gap-3">
-                               <div style={{ backgroundColor: '#eef1f8' }} className="w-8 h-8 rounded-full border border-[var(--border-default)] flex items-center justify-center shrink-0">
-                                 <Activity size={14} className="text-brand-primary" />
-                               </div>
-                               <div>
-                                 <div className="text-[11px] font-medium text-[var(--text-tertiary)] mb-0.5">Pause Transaction</div>
-                                 <div className="font-mono text-[13px] text-[var(--text-primary)]">{truncateAddress(alert.pause_tx, 12)}</div>
-                               </div>
-                             </div>
-                             <div style={{ backgroundColor: '#eef1f8' }} className="flex items-center gap-1.5 p-1 rounded-lg border border-[var(--border-default)]">
-                               <button 
-                                 type="button" 
-                                 onClick={() => handleCopy(alert.pause_tx!, setCopiedTx)} 
-                                 style={{ backgroundColor: copiedTx ? '#eef1f8' : 'transparent' }}
-                                 className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[#f0f4ff] transition-colors"
-                                 title="Copy Hash"
-                               >
-                                 {copiedTx ? <Check size={14} /> : <Copy size={14} />}
-                               </button>
-                               <div className="w-px h-4 bg-[var(--border-default)] mx-0.5"></div>
-                               <a 
-                                 href={`https://explorer.solana.com/tx/${alert.pause_tx}?cluster=devnet`} 
-                                 target="_blank" 
-                                 rel="noopener noreferrer" 
-                                 className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-brand-primary hover:bg-[#f0f4ff] transition-colors"
-                                 title="View on Explorer"
-                               >
-                                 <ExternalLink size={14} />
-                               </a>
-                             </div>
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4">
+                          <div className="w-full">
+                            <div className={`text-[14px] font-bold mb-0.5 ${isDone ? 'text-status-paused' : 'text-[var(--text-secondary)]'}`}>
+                              {entry.label}
+                            </div>
+                            <div className="text-[13px] text-[var(--text-tertiary)]">
+                              {index === 0
+                                ? <>Watcher engine triggered <span className="font-mono text-[var(--text-secondary)]">{alert.rule_triggered}</span> rule.</>
+                                : isPauseStep && alert.pause_tx_signature
+                                ? 'Sentinel executed emergency pause via authority.'
+                                : isPauseStep
+                                ? 'Awaiting confirmation to execute pause.'
+                                : `Step status: ${entry.status}.`}
+                            </div>
                           </div>
-                        )}
+                          <span style={{ backgroundColor: '#f0f4ff' }} className="text-[12px] text-[var(--text-tertiary)] font-mono shrink-0 px-2 py-0.5 rounded border border-[var(--border-default)] mt-1 sm:mt-0 self-start">
+                            {index === 0 ? new Date(alert.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : entry.status.toUpperCase()}
+                          </span>
+                        </div>
                       </div>
-                      {alert.pause_tx && (
-                        <span style={{ backgroundColor: '#f0f4ff' }} className="text-[12px] text-[var(--text-tertiary)] font-mono shrink-0 px-2 py-0.5 rounded border border-[var(--border-default)] mt-1 sm:mt-0 self-start">
-                          +{Math.floor(Math.random() * 800 + 200)}ms
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
+                    );
+                  })}
                 </div>
               </div>
+
+              {alert.pause_tx_signature && (
+                <div>
+                  <h4 className="text-[11px] font-bold uppercase text-[var(--text-tertiary)] tracking-wider mb-3">On-Chain Pause Transaction</h4>
+                  <div style={{ backgroundColor: '#eef1f8' }} className="border border-[var(--border-default)] rounded-[16px] p-5 shadow-sm">
+                    <div style={{ backgroundColor: '#f0f4ff' }} className="border border-[var(--border-default)] rounded-[12px] p-3.5 flex flex-wrap items-center justify-between gap-3 group/tx hover:border-[var(--border-strong)] transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div style={{ backgroundColor: '#eef1f8' }} className="w-8 h-8 rounded-full border border-[var(--border-default)] flex items-center justify-center shrink-0">
+                          <Activity size={14} className="text-brand-primary" />
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-medium text-[var(--text-tertiary)] mb-0.5">Pause Transaction Signature</div>
+                          <div className="font-mono text-[13px] text-[var(--text-primary)] break-all">{alert.pause_tx_signature}</div>
+                        </div>
+                      </div>
+                      <div style={{ backgroundColor: '#eef1f8' }} className="flex items-center gap-1.5 p-1 rounded-lg border border-[var(--border-default)]">
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(alert.pause_tx_signature!, setCopiedTx)}
+                          style={{ backgroundColor: copiedTx ? '#eef1f8' : 'transparent' }}
+                          className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[#f0f4ff] transition-colors"
+                          title="Copy signature"
+                        >
+                          {copiedTx ? <Check size={14} /> : <Copy size={14} />}
+                        </button>
+                        {(alert.explorer_url || alert.tx_url) && (
+                          <>
+                            <div className="w-px h-4 bg-[var(--border-default)] mx-0.5"></div>
+                            <a
+                              href={alert.explorer_url ?? alert.tx_url ?? undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-7 h-7 flex items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-brand-primary hover:bg-[#f0f4ff] transition-colors"
+                              title="View on Explorer"
+                            >
+                              <ExternalLink size={14} />
+                            </a>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {(alert.explorer_url || alert.tx_url) && (
+                      <div className="mt-3 text-[13px]">
+                        <a
+                          href={alert.explorer_url ?? alert.tx_url ?? undefined}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-mono text-brand-primary underline hover:text-brand-dark transition-colors break-all"
+                        >
+                          {alert.explorer_url ?? alert.tx_url}
+                          <ExternalLink size={13} />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
             </div>
           </motion.div>

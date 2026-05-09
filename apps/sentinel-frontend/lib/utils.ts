@@ -5,12 +5,29 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export const formatUSD = (n: number): string => {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+export const formatUSD = (
+  value?: number | string | null
+): string => {
+  const n = Number(value ?? 0);
+
+  if (!Number.isFinite(n)) {
+    return '$0';
+  }
+
+  if (n >= 1_000_000_000) {
+    return `$${(n / 1_000_000_000).toFixed(2)}B`;
+  }
+
+  if (n >= 1_000_000) {
+    return `$${(n / 1_000_000).toFixed(2)}M`;
+  }
+
+  if (n >= 1_000) {
+    return `$${(n / 1_000).toFixed(1)}K`;
+  }
+
   return `$${n.toFixed(0)}`;
 };
-
 export const truncateAddress = (addr: string, chars = 8): string => {
   if (!addr || addr.length < chars + 4) return addr;
   return `${addr.slice(0, chars)}...${addr.slice(-4)}`;

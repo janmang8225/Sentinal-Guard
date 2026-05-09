@@ -2,10 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import RuleBadge from '@/components/shared/RuleBadge';
-import ExplorerLink from '@/components/shared/ExplorerLink';
 import SeverityBadge from '@/components/shared/SeverityBadge';
 import { formatUSD, timeAgo } from '@/lib/utils';
-import type { UiAlert } from '@/lib/watcher';
+import { normalizeUiAlert, type UiAlert } from '@/lib/watcher';
 import { Copy, Check } from 'lucide-react';
 
 interface AlertTableProps {
@@ -81,7 +80,7 @@ export default function AlertTable({ onSelect, rule, minSeverity = 0, searchTerm
       const response = await fetch(`/api/alerts?${params.toString()}`, { cache: 'no-store' });
       const payload = await response.json();
 
-      setAlerts(Array.isArray(payload.alerts) ? payload.alerts as UiAlert[] : []);
+      setAlerts(Array.isArray(payload.alerts) ? payload.alerts.map(normalizeUiAlert) : []);
       setTotal(typeof payload.total === 'number' ? payload.total : 0);
     } catch {
       setAlerts([]);
@@ -137,7 +136,18 @@ export default function AlertTable({ onSelect, rule, minSeverity = 0, searchTerm
                 <td className="py-3.5 px-5 font-mono text-tertiary">#{alert.slot}</td>
                 <td className="py-3.5 px-5 text-secondary">{timeAgo(alert.created_at)}</td>
                 <td className="py-3.5 px-5" onClick={(e) => e.stopPropagation()}>
-                  {alert.pause_tx ? <ExplorerLink signature={alert.pause_tx} /> : <span className="text-tertiary text-[12px]">Pending</span>}
+                  {alert.pause_tx_signature ? (
+                    <a
+                      href={alert.explorer_url ?? alert.tx_url ?? undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-[13px] text-brand-primary underline hover:text-brand-dark transition-colors"
+                    >
+                      {alert.pause_tx_signature.slice(0, 8)}...
+                    </a>
+                  ) : (
+                    <span className="text-tertiary text-[12px]">Pending</span>
+                  )}
                 </td>
                 <td className="py-3.5 px-5">
                   <StatusBadge status={alert.status} />

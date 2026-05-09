@@ -19,7 +19,7 @@ export default function Navbar() {
           <Link href="#" className="text-secondary/80 transition-colors duration-200 hover:text-primary">
             Documentation
           </Link>
-          <Link href="#" className="text-secondary/80 transition-colors duration-200 hover:text-primary">
+          <Link href="https://github.com/Rudraprajapati2612/Sentinal-Guard" className="text-secondary/80 transition-colors duration-200 hover:text-primary">
             GitHub
           </Link>
           <Link

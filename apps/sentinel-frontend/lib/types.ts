@@ -7,7 +7,12 @@ export interface Alert {
   protocol: string;
   slot: number;
   at_risk_usd: number;
-  pause_tx_sig: string;
+  pause_tx_sig?: string;
+  pause_tx_signature?: string | null;
+  explorer_url?: string | null;
+  tx_url?: string | null;
+  on_chain_tx?: string | null;
+  timeline?: { label: string; status: string }[];
   status: 'PAUSED' | 'ACTIVE';
   created_at: string;
   time_ago: string;

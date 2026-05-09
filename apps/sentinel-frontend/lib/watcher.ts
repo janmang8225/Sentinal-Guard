@@ -17,14 +17,29 @@ export function getWatcherWsUrl(): string {
 export interface WatcherAlertRow {
   id?: string;
   alert_id_hex: string;
-  protocol: string;
+  protocol?: string;
+  protocol_address?: string;
   severity: number;
   rule_triggered: string;
-  estimated_at_risk_usd: number;
+  estimated_at_risk_usd?: number;
+  at_risk_amount?: number;
   slot: number;
   on_chain_tx?: string | null;
+  pause_tx_signature?: string | null;
+  explorer_url?: string | null;
+  tx_url?: string | null;
+  timeline?: Array<{
+    label: string;
+    status: string;
+  }>;
+  status?: string;
   created_at?: string;
   timestamp?: number;
+}
+
+export interface AlertTimelineEntry {
+  label: string;
+  status: string;
 }
 
 export interface UiAlert {
@@ -35,7 +50,11 @@ export interface UiAlert {
   protocol_address: string;
   slot: number;
   at_risk_amount: number;
-  pause_tx: string | null;
+  on_chain_tx?: string | null;
+  pause_tx_signature?: string | null;
+  explorer_url?: string | null;
+  tx_url?: string | null;
+  timeline?: AlertTimelineEntry[];
   status: string;
   created_at: string;
 }
@@ -53,7 +72,7 @@ export interface WatcherStats {
   total_alerts: number;
   total_at_risk_usd: number;
   avg_severity: number;
-  avg_response_ms: number;
+  avg_response_time_ms?: number;
   pause_rate_pct: number;
   total_pauses_executed: number;
   protocols_monitored: number;
@@ -83,21 +102,43 @@ export interface WatcherConfig {
   kafka_brokers: string;
 }
 
-export function mapWatcherAlert(alert: WatcherAlertRow): UiAlert {
+export function normalizeUiAlert(alert: Partial<WatcherAlertRow> & {
+  id?: string;
+  status?: string;
+  protocol?: string;
+  protocol_address?: string;
+  at_risk_amount?: number;
+  estimated_at_risk_usd?: number;
+  created_at?: string;
+  on_chain_tx?: string | null;
+  pause_tx_signature?: string | null;
+  explorer_url?: string | null;
+  tx_url?: string | null;
+  timeline?: Array<{ label: string; status: string }>;
+}): UiAlert {
   const createdAt = alert.created_at
     ?? (alert.timestamp ? new Date(alert.timestamp * 1000).toISOString() : new Date().toISOString());
-  const pauseTx = alert.on_chain_tx ?? null;
+  const pauseTx = alert.pause_tx_signature ?? alert.on_chain_tx ?? null;
+  const onChainTx = alert.on_chain_tx ?? pauseTx;
 
   return {
-    id: alert.id ?? alert.alert_id_hex,
-    alert_id_hex: alert.alert_id_hex,
-    rule_triggered: alert.rule_triggered,
-    severity: alert.severity,
-    protocol_address: alert.protocol,
-    slot: alert.slot,
-    at_risk_amount: alert.estimated_at_risk_usd,
-    pause_tx: pauseTx,
-    status: pauseTx ? 'PAUSED' : 'DETECTED',
+    id: alert.id ?? alert.alert_id_hex ?? '',
+    alert_id_hex: alert.alert_id_hex ?? '',
+    rule_triggered: alert.rule_triggered ?? '',
+    severity: alert.severity ?? 0,
+    protocol_address: alert.protocol_address ?? alert.protocol ?? '',
+    slot: alert.slot ?? 0,
+    at_risk_amount: alert.at_risk_amount ?? alert.estimated_at_risk_usd ?? 0,
+    on_chain_tx: onChainTx,
+    pause_tx_signature: pauseTx,
+    explorer_url: alert.explorer_url ?? alert.tx_url ?? null,
+    tx_url: alert.tx_url ?? alert.explorer_url ?? null,
+    timeline: alert.timeline,
+    status: alert.status ?? (pauseTx ? 'PAUSED' : 'DETECTED'),
     created_at: createdAt,
   };
+}
+
+export function mapWatcherAlert(alert: WatcherAlertRow): UiAlert {
+  return normalizeUiAlert(alert);
 }

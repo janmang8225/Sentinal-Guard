@@ -58,6 +58,7 @@ export default function AnalyticsContent({
   alerts: UiAlert[];
   stats: WatcherStats | null;
 }) {
+  const avgResponseTimeMs = Number(stats?.avg_response_time_ms ?? 0).toFixed(0);
   const totalAtRisk = alerts.reduce((s, a) => s + a.at_risk_amount, 0);
   const avgSeverity = alerts.length ? Math.round(alerts.reduce((s, a) => s + a.severity, 0) / alerts.length) : 0;
   const pauseCount = alerts.filter((a) => a.status === 'PAUSED').length;
@@ -112,7 +113,7 @@ export default function AnalyticsContent({
         </div>
         <div className="bg-surface border border-border-default rounded-[12px] p-[20px] shadow-[var(--shadow-sm)]">
           <div className="text-[12px] font-medium text-secondary mb-2">Avg Response</div>
-          <div className="text-[28px] font-display font-bold text-primary leading-none mb-2">{stats ? `${(stats.avg_response_ms / 1000).toFixed(1)}s` : '~2.8s'}</div>
+          <div className="text-[28px] font-display font-bold text-primary leading-none mb-2">{`${avgResponseTimeMs}ms`}</div>
           <div className="text-[12px] text-secondary">Detection &rarr; Pause</div>
         </div>
         <div className="bg-surface border border-border-default rounded-[12px] p-[20px] shadow-[var(--shadow-sm)]">
@@ -250,7 +251,7 @@ export default function AnalyticsContent({
               const ruleAvgSev = Math.round(ruleAlerts.reduce((s, a) => s + a.severity, 0) / ruleAlerts.length);
               const ruleTotalRisk = ruleAlerts.reduce((s, a) => s + a.at_risk_amount, 0);
               const rulePauses = ruleAlerts.filter((a) => a.status === 'PAUSED').length;
-              const ruleAvgResp = Math.round(stats?.avg_response_ms ?? 0);
+              const ruleAvgResp = Number(stats?.avg_response_time_ms ?? 0).toFixed(0);
 
               return (
                 <tr key={rule} className="border-b border-border-default">
@@ -261,7 +262,7 @@ export default function AnalyticsContent({
                   <td className="py-4 px-6 font-medium text-severity-high-text">{ruleAvgSev}/99</td>
                   <td className="py-4 px-6 font-bold text-status-paused">{formatUSD(ruleTotalRisk)}</td>
                   <td className="py-4 px-6 font-medium text-status-active">{Math.round((rulePauses / ruleAlerts.length) * 100)}%</td>
-                  <td className="py-4 px-6 text-secondary">{ruleAvgResp ? `${(ruleAvgResp / 1000).toFixed(1)}s` : 'N/A'}</td>
+                  <td className="py-4 px-6 text-secondary">{`${ruleAvgResp}ms`}</td>
                 </tr>
               );
             })}
