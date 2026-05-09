@@ -48,3 +48,7 @@ build/
 # Rust build (custom cargo target dir)
 .cargo-target/
 **/.cargo-target/
+
+# Solana keypairs
+keys/*.json
+watcher/keys/*.json
