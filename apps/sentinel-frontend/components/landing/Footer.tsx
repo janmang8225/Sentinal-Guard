@@ -55,15 +55,15 @@ export default function Footer() {
             <h3 className="font-semibold text-white text-[15px] mb-6 tracking-tight">Product</h3>
             <ul className="flex flex-col gap-4 text-[15px] text-slate-400 font-medium">
               <li><Link href="/dashboard" className="hover:text-[#3b82f6] hover:translate-x-1 transition-all flex items-center gap-2 w-fit"><Terminal size={16} /> Dashboard</Link></li>
-              <li><Link href="#" className="hover:text-[#3b82f6] hover:translate-x-1 transition-all flex items-center gap-2 w-fit"><BookOpen size={16} /> Documentation</Link></li>
+              <li><Link href="/docs" className="hover:text-[#3b82f6] hover:translate-x-1 transition-all flex items-center gap-2 w-fit"><BookOpen size={16} /> Documentation</Link></li>
             </ul>
           </div>
 
           <div>
             <h3 className="font-semibold text-white text-[15px] mb-6 tracking-tight">Developers</h3>
             <ul className="flex flex-col gap-4 text-[15px] text-slate-400 font-medium">
-              <li><Link href="#" className="hover:text-[#3b82f6] hover:translate-x-1 transition-all flex items-center gap-2 w-fit"><Github size={16} /> GitHub</Link></li>
-              <li><Link href="#" className="hover:text-[#3b82f6] hover:translate-x-1 transition-all flex items-center gap-2 w-fit"><Twitter size={16} /> Twitter / X</Link></li>
+              <li><Link href="https://github.com/Rudraprajapati2612" className="hover:text-[#3b82f6] hover:translate-x-1 transition-all flex items-center gap-2 w-fit"><Github size={16} /> GitHub</Link></li>
+              <li><Link href="https://x.com/0xRudraSol" className="hover:text-[#3b82f6] hover:translate-x-1 transition-all flex items-center gap-2 w-fit"><Twitter size={16} /> Twitter / X</Link></li>
             </ul>
           </div>
         </div>

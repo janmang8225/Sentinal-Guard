@@ -16,7 +16,7 @@ export default function Navbar() {
         </div>
 
         <div className="hidden items-center gap-6 text-sm font-medium md:flex">
-          <Link href="#" className="text-secondary/80 transition-colors duration-200 hover:text-primary">
+          <Link href="/docs" className="text-secondary/80 transition-colors duration-200 hover:text-primary">
             Documentation
           </Link>
           <Link href="https://github.com/Rudraprajapati2612/Sentinal-Guard" className="text-secondary/80 transition-colors duration-200 hover:text-primary">

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+
 // tests/attack_scenarios_full.ts — COMPLETE SUITE (13 Scenarios)
 //
 // Self-contained: handles setup (mint, vault init, sentinel register, seed)
@@ -816,9 +816,21 @@ async function main() {
       await sleep(400);
     }
 
-    // Wait for watcher to detect, score, and submit pause tx
-    console.log(`\n  ${Y}⏳ Waiting for SentinelGuard to detect and pause (~5s)...${RESET}`);
-    await sleep(5_000);
+    // Poll sentinel state until is_paused=true (byte 80) or 20s timeout.
+    // SentinelState layout: discriminator(8)+protocol(32)+watcher(32)+escrow(8)+is_paused(1)
+    console.log(`\n  ${Y}⏳ Polling on-chain sentinel state until pause confirmed (max 20s)...${RESET}`);
+    const deadline = Date.now() + 20_000;
+    let paused = false;
+    while (Date.now() < deadline) {
+      const acc = await conn.getAccountInfo(sentinelState);
+      if (acc && acc.data[80] === 1) { paused = true; break; }
+      await sleep(500);
+    }
+    if (paused) {
+      console.log(`  ${G}✓ Pause confirmed on-chain — now attempting exploit drain...${RESET}`);
+    } else {
+      console.log(`  ${Y}⚠ Pause not confirmed in 20s — drain may succeed (check sentinel layout)${RESET}`);
+    }
 
     // Post-pause drain — MUST revert
     console.log(`\n  ${Y}Attempting drain AFTER pause is confirmed...${RESET}`);

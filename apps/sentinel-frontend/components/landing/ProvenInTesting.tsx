@@ -6,8 +6,8 @@ import { motion, Variants } from 'framer-motion';
 
 const SCENARIOS = [
   { id: 1, type: "Normal deposits + 3.3% withdrawal", expected: "No alert", result: "Silent", tx: null },
-  { id: 2, type: "Rapid 81% drain in 3 transactions", expected: "TVL_VELOCITY", result: "Severity 99, <3s", tx: "3sX4PLsGqo9rhVCZ1vRWRoK9kx7VNkkYfrDmrDnjgNHHawpeK7MqccZxVJesYp8N9XDUyeNYxvoZuCU5rYyet3F8" },
-  { id: 3, type: "Flash loan + 40% drain exploit", expected: "FLASH_LOAN_DRAIN", result: "Severity 64, <5s", tx: "28wPiUdajetVddnuKq7NHqMVfgRcrYxKccq1E1vAjRuwCsH2LRQDbBRvTi9sz5XuFtPZm7Vk1SYUDARFMAHZMsou" },
+  { id: 2, type: "Rapid 81% drain in 3 transactions", expected: "TVL_VELOCITY", result: "Severity 99, <3s", tx: "3BtKhbumvRwPhDaAbhGiRPbA3iWGfbMH66Fsu8SkrSHDPx7gmau6vet8cMccbzAKuEttMMBXXNkhNg4QSo423kHQ" },
+  { id: 3, type: "Flash loan + 40% drain exploit", expected: "FLASH_LOAN_DRAIN", result: "Severity 64, <5s", tx: "2QdTiQKEgBaF53Hk29ek75eo6mnaD3Cfv2fTimcUtMeDN48gbqwoLi9PsZ7Wa1nekoMoVZaajN9RQbkTMvwjNeDo" },
   { id: 4, type: "10% single drain (below threshold)", expected: "No alert", result: "Silent", tx: null },
   { id: 5, type: "Slow 5%×8 cumulative bleed", expected: "TVL_VELOCITY", result: "Fires at slice 5", tx: "cooldown" },
 ];
