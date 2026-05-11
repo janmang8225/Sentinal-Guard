@@ -52,7 +52,7 @@ export default function AlertFeed({ onSelect }: { onSelect?: (alert: UiAlert) =>
         setLoading(false);
       };
     } catch {
-      setLoading(false);
+      setTimeout(() => setLoading(false), 0);
     }
 
     return () => {

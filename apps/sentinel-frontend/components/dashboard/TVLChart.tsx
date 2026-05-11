@@ -51,16 +51,21 @@ export default function TVLChart({ protocol }: { protocol: string }) {
 
   useEffect(() => {
     if (!protocol) {
-      setData([]);
-      setLoading(false);
-      setError('no_protocol');
+      setTimeout(() => {
+        setData([]);
+        setLoading(false);
+        setError('no_protocol');
+      }, 0);
       return;
     }
 
-    setLoading(true);
-    void load();
+    setTimeout(() => setLoading(true), 0);
+    const timer = setTimeout(() => void load(), 0);
     const interval = window.setInterval(() => void load(), 5000);
-    return () => window.clearInterval(interval);
+    return () => {
+      clearTimeout(timer);
+      window.clearInterval(interval);
+    };
   }, [protocol, load]);
 
   if (loading) {
@@ -137,7 +142,7 @@ export default function TVLChart({ protocol }: { protocol: string }) {
           <div className="text-center">
             <p className="text-[14px] font-semibold text-secondary mb-1">No TVL snapshots yet</p>
             <p className="text-[13px] text-tertiary max-w-xs">
-              The watcher hasn't emitted any TVL data for this protocol. Snapshots appear as the watcher
+              The watcher hasn&apos;t emitted any TVL data for this protocol. Snapshots appear as the watcher
               processes on-chain slots.
             </p>
           </div>
@@ -181,7 +186,6 @@ export default function TVLChart({ protocol }: { protocol: string }) {
                 contentStyle={{ borderRadius: '8px', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-md)' }}
                 labelStyle={{ fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)', marginBottom: '8px', fontSize: '12px' }}
                 labelFormatter={(v) => `Slot #${v}`}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 formatter={(value: any) => [<span key="val" className="font-medium text-primary text-[14px]">{formatUSD(Number(value))}</span>, 'TVL']}
               />
 

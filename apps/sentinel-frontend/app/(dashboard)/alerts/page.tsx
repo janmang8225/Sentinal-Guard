@@ -33,7 +33,7 @@ export default function AlertsPage() {
   const rule = RULE_FILTER_MAP[ruleFilter];
   const minSeverity = SEVERITY_FILTER_MAP[severityFilter] ?? 0;
 
-  const RulesPanelContent = () => (
+  const renderRulesPanelContent = () => (
     <>
       <div className="flex items-center justify-between p-6 border-b border-border-default bg-surface shrink-0 sticky top-0 z-10">
         <h3 className="font-display font-bold text-[18px] text-primary flex items-center gap-2">
@@ -140,7 +140,7 @@ export default function AlertsPage() {
       {showRules && (
         <div className="hidden lg:block shrink-0 border-l border-border-default bg-surface relative z-20 overflow-hidden shadow-sm w-[340px]">
           <div className="w-[340px] h-full flex flex-col">
-            <RulesPanelContent />
+            {renderRulesPanelContent()}
           </div>
         </div>
       )}
@@ -152,7 +152,7 @@ export default function AlertsPage() {
             onClick={() => setShowRules(false)}
           />
           <div className="lg:hidden absolute top-0 right-0 h-full w-full sm:w-[360px] bg-surface border-l border-border-default z-40 flex flex-col shadow-2xl">
-            <RulesPanelContent />
+            {renderRulesPanelContent()}
           </div>
         </>
       )}

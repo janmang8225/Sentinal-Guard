@@ -90,9 +90,15 @@ export default function AlertTable({ onSelect, rule, minSeverity = 0, searchTerm
     }
   }, [minSeverity, page, pageSize, rule, searchTerm]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { 
+    const timer = setTimeout(() => void load(), 0);
+    return () => clearTimeout(timer);
+  }, [load]);
 
-  useEffect(() => { setPage(0); }, [rule, minSeverity, pageSize, searchTerm]);
+  useEffect(() => { 
+    const timer = setTimeout(() => setPage(0), 0);
+    return () => clearTimeout(timer);
+  }, [rule, minSeverity, pageSize, searchTerm]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 

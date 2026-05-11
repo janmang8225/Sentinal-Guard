@@ -27,93 +27,54 @@ type SidebarGroup = {
   }>;
 };
 
-const INTRODUCTION_SIDEBAR: SidebarGroup[] = [
-  {
-    label: 'Getting Started',
-    items: [
-      { icon: BookOpen, label: 'Introduction', href: '/docs/introduction' },
-      { icon: Zap, label: 'Quick Start', href: '/docs/quick-start' },
-    ],
-  },
-  {
-    label: 'Core Concepts',
-    items: [
-      { icon: Shield, label: 'How It Works', href: '/docs/how-it-works' },
-      { icon: Cpu, label: 'Detection Rules', href: '/docs/detection-rules' },
-      { icon: Code2, label: 'SDK Integration', href: '#' },
-    ],
-  },
-  {
-    label: 'Reference',
-    items: [
-      { icon: Code2, label: 'API Reference', href: '#' },
-      { icon: GitCommit, label: 'Changelog', href: '#' },
-    ],
-  },
-];
-
-const QUICKSTART_SIDEBAR: SidebarGroup[] = [
+const DOCS_SIDEBAR: SidebarGroup[] = [
   {
     label: 'Getting Started',
     items: [
       { icon: BookOpen, label: 'Overview', href: '/docs/introduction' },
       { icon: Zap, label: 'Quick Start', href: '/docs/quick-start' },
-      { icon: Code2, label: 'Installation', href: '#' },
-      { icon: Settings2, label: 'Environment Setup', href: '/docs/quick-start#environment-setup' },
     ],
   },
   {
     label: 'Core Concepts',
     items: [
       { icon: Shield, label: 'How Detection Works', href: '/docs/how-it-works' },
-      { icon: Activity, label: 'Rolling Window Engine', href: '#' },
-      { icon: Cpu, label: 'Severity Scoring', href: '/docs/detection-rules#severity-model' },
-      { icon: Shield, label: 'Alert Lifecycle', href: '#' },
-    ],
-  },
-  {
-    label: 'Detection Rules',
-    items: [
-      { icon: Zap, label: 'Rule 1 — Flash Loan Drain', href: '/docs/detection-rules#flash-loan-drain' },
-      { icon: Zap, label: 'Rule 2 — TVL Velocity', href: '/docs/detection-rules#tvl-velocity' },
-      { icon: Zap, label: 'Rule 3 — Bridge Spike', href: '/docs/detection-rules#bridge-spike' },
+      { icon: Cpu, label: 'Detection Rules', href: '/docs/detection-rules' },
     ],
   },
   {
     label: 'Integration',
     items: [
-      { icon: Code2, label: 'SDK Reference', href: '#' },
-      { icon: Webhook, label: 'Webhook Setup', href: '#' },
-      { icon: Shield, label: 'Protocol Registration', href: '#' },
-      { icon: PauseCircle, label: 'On-chain Pause', href: '#' },
+      { icon: Code2, label: 'SDK Reference', href: '/docs/sdk-reference' },
+      { icon: Webhook, label: 'Webhook Setup', href: '/docs/webhook-setup' },
+      { icon: Shield, label: 'Protocol Registration', href: '/docs/protocol-registration' },
     ],
   },
   {
     label: 'API Reference',
     items: [
-      { icon: Code2, label: 'REST Endpoints', href: '#' },
-      { icon: Waves, label: 'WebSocket Feed', href: '#' },
-      { icon: GitCommit, label: 'Alert Schema', href: '#' },
+      { icon: Code2, label: 'REST Endpoints', href: '/docs/rest-endpoints' },
+      { icon: Waves, label: 'WebSocket Feed', href: '/docs/websocket-feed' },
+      { icon: GitCommit, label: 'Alert Schema', href: '/docs/alert-schema' },
     ],
   },
   {
     label: 'Resources',
     items: [
-      { icon: Shield, label: 'Architecture Diagram', href: '/docs/introduction#architecture' },
-      { icon: Shield, label: 'Attack Scenarios', href: '#' },
-      { icon: HelpCircle, label: 'FAQ', href: '#' },
+      { icon: HelpCircle, label: 'FAQ', href: '/docs/faq' },
+      { icon: GitCommit, label: 'Changelog', href: '/docs/changelog' },
     ],
   },
 ];
 
 interface Props {
   onLinkClick: () => void;
-  variant: 'introduction' | 'quickstart';
+  variant?: 'introduction' | 'quickstart';
 }
 
-export default function DocsSidebar({ onLinkClick, variant }: Props) {
+export default function DocsSidebar({ onLinkClick }: Props) {
   const pathname = usePathname();
-  const groups = variant === 'introduction' ? INTRODUCTION_SIDEBAR : QUICKSTART_SIDEBAR;
+  const groups = DOCS_SIDEBAR;
 
   return (
     <div className="flex h-full flex-col px-4 py-6">

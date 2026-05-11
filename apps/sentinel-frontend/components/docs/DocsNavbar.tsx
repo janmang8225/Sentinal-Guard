@@ -7,9 +7,9 @@ import Link from 'next/link';
 const NAV_LINKS = [
   { label: 'Overview', href: '/docs/introduction' },
   { label: 'Quick Start', href: '/docs/quick-start' },
-  { label: 'API Reference', href: '#' },
+  { label: 'API Reference', href: '/docs/rest-endpoints' },
   { label: 'Architecture', href: '/docs/introduction#architecture' },
-  { label: 'Changelog', href: '#' },
+  { label: 'Changelog', href: '/docs/changelog' },
 ];
 
 interface Props {
